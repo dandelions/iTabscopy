@@ -61,7 +61,7 @@ const DataManagement = ({ isOpen, onClose, onExport, onImport }) => {
 
             {/* Drawer Panel */}
             <div
-                className={`absolute top-0 right-0 h-full w-[480px] bg-white/10 backdrop-blur-2xl border-l border-white/20 shadow-2xl transform transition-transform duration-300 ease-out flex flex-col ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}
+                className={`absolute top-0 right-0 h-full w-[480px] bg-white/10 backdrop-blur-2xl border-l border-white/20 shadow-2xl transform transition-transform duration-300 ease-out flex flex-col rounded-l-2xl overflow-hidden ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}
             >
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
