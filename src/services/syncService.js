@@ -1,6 +1,4 @@
 // Sync service for communicating with Cloudflare Worker
-const DEFAULT_WORKER_URL = 'https://newtab.tenom.workers.dev';
-
 class SyncService {
     constructor() {
         this.token = localStorage.getItem('sync_token');
@@ -12,9 +10,9 @@ class SyncService {
         return navigator.onLine;
     }
 
-    // Get worker URL from localStorage or use default
+    // Get worker URL from localStorage
     getWorkerUrl() {
-        return localStorage.getItem('sync_worker_url') || DEFAULT_WORKER_URL;
+        return localStorage.getItem('sync_worker_url') || '';
     }
 
     // Set custom worker URL
@@ -26,9 +24,19 @@ class SyncService {
         }
     }
 
+    // Ensure worker URL exists before network calls
+    requireWorkerUrl() {
+        const url = this.getWorkerUrl();
+        if (!url) {
+            throw new Error('请在同步设置中配置 Worker 地址');
+        }
+        return url;
+    }
+
     // Register new user
     async register(email, password) {
-        const response = await fetch(`${this.getWorkerUrl()}/api/auth/register`, {
+        const workerUrl = this.requireWorkerUrl();
+        const response = await fetch(`${workerUrl}/api/auth/register`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -48,7 +56,8 @@ class SyncService {
 
     // Login user
     async login(email, password) {
-        const response = await fetch(`${this.getWorkerUrl()}/api/auth/login`, {
+        const workerUrl = this.requireWorkerUrl();
+        const response = await fetch(`${workerUrl}/api/auth/login`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -71,13 +80,16 @@ class SyncService {
         // Call server to delete token
         if (this.token) {
             try {
-                await fetch(`${this.getWorkerUrl()}/api/auth/logout`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${this.token}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
+                const workerUrl = this.getWorkerUrl();
+                if (workerUrl) {
+                    await fetch(`${workerUrl}/api/auth/logout`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${this.token}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                }
             } catch (error) {
                 console.warn('Failed to delete token from server:', error);
                 // Continue with local cleanup even if server request fails
@@ -103,7 +115,8 @@ class SyncService {
             return null;
         }
 
-        const response = await fetch(`${this.getWorkerUrl()}/api/sync/pull`, {
+        const workerUrl = this.requireWorkerUrl();
+        const response = await fetch(`${workerUrl}/api/sync/pull`, {
             method: 'GET',
             headers: {
                 'Authorization': `Bearer ${this.token}`,
@@ -139,7 +152,8 @@ class SyncService {
             return null;
         }
 
-        const response = await fetch(`${this.getWorkerUrl()}/api/sync/push`, {
+        const workerUrl = this.requireWorkerUrl();
+        const response = await fetch(`${workerUrl}/api/sync/push`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${this.token}`,
