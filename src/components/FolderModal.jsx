@@ -1,18 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Edit2, Trash2 } from 'lucide-react';
-import { getIconUrl } from '../utils/icons';
 import {
-    DndContext,
-    closestCenter,
-    MouseSensor,
-    TouchSensor,
-    useSensor,
-    useSensors,
-    DragOverlay,
     useDroppable,
 } from '@dnd-kit/core';
 import {
-    arrayMove,
     SortableContext,
     rectSortingStrategy,
     useSortable,
@@ -38,10 +29,10 @@ const SortableFolderItem = ({ shortcut, onRemove, onEdit, isContextOpen, setCont
     };
 
     const iconSrc = useIconSource(shortcut);
-    const iconRef = React.useRef(null);
+    const iconRef = useRef(null);
 
     // 动态光泽效果
-    React.useEffect(() => {
+    useEffect(() => {
         const element = iconRef.current;
         if (!element) return;
 

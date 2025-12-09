@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Pin, PinOff, Plus, Trash2, Check } from 'lucide-react';
 
 const formatDate = (isoString) => {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { X, Download, Upload, Check, AlertCircle } from 'lucide-react';
 
 const DataManagement = ({ isOpen, onClose, onExport, onImport }) => {

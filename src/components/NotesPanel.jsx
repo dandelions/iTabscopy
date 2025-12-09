@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { X, Plus, Trash2, Check, Download, Upload, Search } from 'lucide-react';
 import { marked } from 'marked';
 

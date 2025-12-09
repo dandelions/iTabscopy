@@ -1,6 +1,5 @@
-import React from 'react';
-import { getIconUrl } from '../utils/icons';
 import { useIconSource } from '../hooks/useIconSource';
+import { useEffect, useRef } from 'react';
 
 const MiniIcon = ({ item }) => {
     const iconSrc = useIconSource(item);
@@ -36,7 +35,7 @@ const MiniIcon = ({ item }) => {
 const FolderIcon = ({ folder, iconSize }) => {
     const previewItems = folder.children.slice(0, 9);
     const isLarge = previewItems.length <= 4;
-    const folderRef = React.useRef(null);
+    const folderRef = useRef(null);
     
     // Calculate mini icon size based on container size
     // 3x3 grid or 2x2 grid
@@ -44,7 +43,7 @@ const FolderIcon = ({ folder, iconSize }) => {
     const contentSize = iconSize - (padding * 2);
     
     // 动态光泽效果
-    React.useEffect(() => {
+    useEffect(() => {
         const element = folderRef.current;
         if (!element) return;
 

@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, Trash2, Edit2 } from 'lucide-react';
-import { getIconUrl, getIconSources } from '../utils/icons';
 import { useIconSource } from '../hooks/useIconSource';
 import EditShortcutModal from './EditShortcutModal';
 import FolderIcon from './FolderIcon';
@@ -44,10 +43,10 @@ const ShortcutIcon = ({ shortcut, iconSize, isContextOpen, onRemove, onEdit, set
     }
 
     const iconSrc = useIconSource(shortcut);
-    const iconRef = React.useRef(null);
+    const iconRef = useRef(null);
 
     // 动态光泽效果
-    React.useEffect(() => {
+    useEffect(() => {
         const element = iconRef.current;
         if (!element) return;
 

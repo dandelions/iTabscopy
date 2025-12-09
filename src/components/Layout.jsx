@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 
 const Layout = ({ children, backgroundUrl, bgConfig }) => {
     const { blur = 2, overlay = 30 } = bgConfig || {};

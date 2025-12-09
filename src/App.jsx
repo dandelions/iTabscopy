@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Layout from './components/Layout';
 import SearchBar from './components/SearchBar';
 import Settings from './components/Settings';
@@ -12,7 +12,7 @@ import { Globe, Settings as SettingsIcon, Cloud, ClipboardList, StickyNote, Plus
 import { fetchRandomPhoto, getCachedImage, cacheImage } from './utils/unsplash';
 import { removeIconFromCache } from './utils/icons';
 
-import { arrayMove } from '@dnd-kit/sortable';
+// import { arrayMove } from '@dnd-kit/sortable';
 import syncService from './services/syncService';
 
 const DEFAULT_BG_URL = 'https://images.unsplash.com/photo-1472214103451-9374bd1c798e?q=80&w=2070&auto=format&fit=crop';

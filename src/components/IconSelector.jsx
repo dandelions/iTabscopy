@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Upload, Check } from 'lucide-react';
 import { getAllIconUrls } from '../utils/icons';
 
