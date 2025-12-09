@@ -1,0 +1,69 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Definitions for Gradients and Filters -->
+  <defs>
+    <!-- Main Body Gradient: Deep Fluid Feel (Blue to Violet) -->
+    <linearGradient id="mainGradient" x1="14" y1="14" x2="114" y2="114" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#60A5FA" /> <!-- Light Blue -->
+      <stop offset="50%" stop-color="#3B82F6" /> <!-- Blue -->
+      <stop offset="100%" stop-color="#7C3AED" /> <!-- Violet -->
+    </linearGradient>
+
+    <!-- Top Gloss Reflection -->
+    <linearGradient id="topGloss" x1="64" y1="0" x2="64" y2="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="white" stop-opacity="0.8" />
+      <stop offset="100%" stop-color="white" stop-opacity="0.0" />
+    </linearGradient>
+
+    <!-- Bottom Caustic Glow -->
+    <radialGradient id="bottomGlow" cx="64" cy="128" r="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#22D3EE" stop-opacity="0.5" />
+      <stop offset="100%" stop-color="#22D3EE" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Sparkle Fill Gradient (Subtle Metallic White) -->
+    <linearGradient id="sparkleFill" x1="30" y1="30" x2="100" y2="100" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#E0E7FF" />
+    </linearGradient>
+  </defs>
+
+  <!-- Base Squircle Shape -->
+  <rect x="8" y="8" width="112" height="112" rx="26" fill="url(#mainGradient)" />
+
+  <!-- Inner Depth Border -->
+  <path d="M 34 8 H 94 C 108.3 8 120 19.7 120 34 V 94 C 120 108.3 108.3 120 94 120 H 34 C 19.7 120 8 108.3 8 94 V 34 C 8 19.7 19.7 8 34 8 Z" 
+        stroke="black" stroke-opacity="0.05" stroke-width="1" fill="none"/>
+
+  <!-- Bottom Glow -->
+  <rect x="8" y="8" width="112" height="112" rx="26" fill="url(#bottomGlow)" />
+
+  <!-- Top Glass Highlight -->
+  <path d="M 16 34 C 16 22 24 16 34 16 H 94 C 104 16 110 20 112 28 C 112 28 100 60 64 60 C 28 60 16 34 16 34 Z" 
+        fill="url(#topGloss)" opacity="0.3" />
+
+  <!-- Edge Rim Light -->
+  <rect x="8.5" y="8.5" width="111" height="111" rx="25.5" stroke="white" stroke-opacity="0.4" stroke-width="1" />
+
+  <!-- 
+    Center Symbol: Apple-style "Magic/AI" Sparkles 
+    Composed of one large primary sparkle and a smaller satellite sparkle.
+    Curves are cubic beziers tuned for that "Squircle" tension feel.
+  -->
+  <g filter="drop-shadow(0px 4px 8px rgba(0,0,0,0.2))">
+    <!-- Main Large Sparkle (Centered slightly left/bottom to make room for satellite) -->
+    <path d="M 58 30 
+             C 58 52, 70 64, 92 64 
+             C 70 64, 58 76, 58 98 
+             C 58 76, 46 64, 24 64 
+             C 46 64, 58 52, 58 30 Z" 
+          fill="url(#sparkleFill)" />
+          
+    <!-- Satellite Sparkle (Top Right) -->
+    <path d="M 98 22 
+             C 98 30, 102 34, 110 34 
+             C 102 34, 98 38, 98 46 
+             C 98 38, 94 34, 86 34 
+             C 94 34, 98 30, 98 22 Z" 
+          fill="url(#sparkleFill)" opacity="0.9" />
+  </g>
+</svg>
