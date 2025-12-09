@@ -106,7 +106,7 @@ const Settings = ({
                                     >
                                         <Github className="h-5 w-5 text-white/80 group-hover:text-white transition-colors" />
                                         <div className="flex-1">
-                                            <div className="text-sm text-white font-medium">iTab</div>
+                                            <div className="text-sm text-white font-medium">iTabs</div>
                                             <div className="text-xs text-white/40">View source on GitHub</div>
                                         </div>
                                     </a>
