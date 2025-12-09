@@ -154,14 +154,6 @@ function App() {
     // Initial pull on startup
     pullFromCloud();
 
-    // Pull when tab becomes visible
-    const handleVisibilityChange = () => {
-      if (!document.hidden && syncService.isLoggedIn()) {
-        pullFromCloud();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
     // Listen for storage changes (e.g. from Popup)
     const handleStorageChange = (e) => {
       if (e.key === 'shortcuts') {
@@ -174,7 +166,6 @@ function App() {
     window.addEventListener('storage', handleStorageChange);
 
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('storage', handleStorageChange);
     };
   }, [pullFromCloud]);
