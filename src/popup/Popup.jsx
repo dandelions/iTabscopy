@@ -166,8 +166,9 @@ const Popup = () => {
                                 <div className="bg-white/5 border border-white/10 rounded-lg p-3 backdrop-blur-sm">
                                     <IconSelector
                                         url={url}
-                                        currentIcon={customIcon}
-                                        onIconChange={setCustomIcon}
+                                        title={title}
+                                        onSelect={setCustomIcon}
+                                        selectedIcon={customIcon}
                                     />
                                 </div>
                             </div>
