@@ -317,7 +317,10 @@ const Settings = ({
                                                 };
 
                                                 // Push to server
-                                                await syncService.pushData(data);
+                                                const result = await syncService.pushData(data);
+                                                if (result?.updatedAt && Number.isFinite(Number(result.updatedAt))) {
+                                                    localStorage.setItem('last_local_update', String(Number(result.updatedAt)));
+                                                }
                                                 showToast('Data synced successfully!', 'success');
                                             } catch (error) {
                                                 showToast(error.message, 'error');
@@ -571,7 +574,7 @@ const LoginForm = ({ onLogin, showToast, onSyncPull }) => {
             localStorage.setItem('grid_config', JSON.stringify(mergedData.gridConfig));
             localStorage.setItem('bg_config', JSON.stringify(mergedData.bgConfig));
             localStorage.setItem('bg_url', mergedData.bgUrl);
-            localStorage.setItem('last_local_update', new Date().toISOString());
+            localStorage.setItem('last_local_update', String(Date.now()));
 
             // Push merged data to cloud immediately
             await syncService.pushData(mergedData);
@@ -613,7 +616,7 @@ const LoginForm = ({ onLogin, showToast, onSyncPull }) => {
                 };
                 
                 await syncService.pushData(localData);
-                localStorage.setItem('last_local_update', new Date().toISOString());
+                localStorage.setItem('last_local_update', String(Date.now()));
                 showToast('本地数据已上传到云端', 'success');
                 
                 setShowDataConflict(false);
@@ -664,7 +667,7 @@ const LoginForm = ({ onLogin, showToast, onSyncPull }) => {
                         return;
                     } else {
                         // Cloud has no data, use local and push
-                        localStorage.setItem('last_local_update', new Date().toISOString());
+                        localStorage.setItem('last_local_update', String(Date.now()));
                     }
                 } else {
                     // No local data, pull from cloud
@@ -835,8 +838,9 @@ const LoginForm = ({ onLogin, showToast, onSyncPull }) => {
 const SyncPanel = ({ email, isSyncing, onSync, onLogout, lastSync }) => {
     const formatLastSync = (timestamp) => {
         if (!timestamp) return '从未';
-        const date = new Date(timestamp);
-        return date.toLocaleString();
+        const numeric = Number(timestamp);
+        const date = Number.isFinite(numeric) ? new Date(numeric) : new Date(timestamp);
+        return Number.isNaN(date.getTime()) ? '从未' : date.toLocaleString();
     };
 
     return (

@@ -61,8 +61,24 @@ function App() {
   const isPullingRef = useRef(false);
 
   const updateLocalTimestamp = () => {
-    localStorage.setItem('last_local_update', new Date().toISOString());
+    localStorage.setItem('last_local_update', String(Date.now()));
   };
+
+  // Normalize legacy ISO timestamps to numeric millis once on load
+  useEffect(() => {
+    const raw = localStorage.getItem('last_local_update');
+    if (raw !== null) {
+      const numeric = Number(raw);
+      if (!Number.isFinite(numeric)) {
+        const parsed = Date.parse(raw);
+        if (Number.isFinite(parsed)) {
+          localStorage.setItem('last_local_update', String(parsed));
+        } else {
+          localStorage.removeItem('last_local_update');
+        }
+      }
+    }
+  }, []);
 
   // Auto-pull from cloud - defined with useCallback to avoid closure issues
   const pullFromCloud = useCallback(async () => {
@@ -78,8 +94,13 @@ function App() {
       }
 
       // Get last local update time
-      const lastLocalUpdate = localStorage.getItem('last_local_update');
-      const cloudUpdatedAt = cloudData.updatedAt;
+      const lastRaw = localStorage.getItem('last_local_update');
+      const lastLocalUpdate = lastRaw !== null && Number.isFinite(Number(lastRaw))
+        ? Number(lastRaw)
+        : null;
+      const cloudUpdatedAt = Number.isFinite(Number(cloudData.updatedAt))
+        ? Number(cloudData.updatedAt)
+        : null;
 
       // Decide whether to apply cloud data:
       // - If cloud has a timestamp, require it to be newer than local
@@ -87,7 +108,7 @@ function App() {
       // If timestamps are equal, we assume data is already in sync and do not apply cloud data.
       // If a custom conflict resolution is needed for equal timestamps, implement it here.
       const shouldApplyCloud = cloudUpdatedAt
-        ? (!lastLocalUpdate || new Date(cloudUpdatedAt) > new Date(lastLocalUpdate))
+        ? (!lastLocalUpdate || cloudUpdatedAt > lastLocalUpdate)
         : !lastLocalUpdate;
 
       if (shouldApplyCloud) {
@@ -135,7 +156,7 @@ function App() {
 
         if (updated) {
           if (cloudUpdatedAt) {
-            localStorage.setItem('last_local_update', cloudUpdatedAt);
+            localStorage.setItem('last_local_update', String(cloudUpdatedAt));
           }
           console.log('Cloud data pulled successfully - UI should update now');
         }
@@ -215,7 +236,7 @@ function App() {
     const updated = [...shortcuts, newShortcut];
     setShortcuts(updated);
     localStorage.setItem('shortcuts', JSON.stringify(updated));
-    localStorage.setItem('last_local_update', new Date().toISOString());
+    updateLocalTimestamp();
   };
 
   const handleRemoveShortcut = (id) => {
@@ -226,7 +247,7 @@ function App() {
     const updated = shortcuts.filter(s => s.id !== id);
     setShortcuts(updated);
     localStorage.setItem('shortcuts', JSON.stringify(updated));
-    localStorage.setItem('last_local_update', new Date().toISOString());
+    updateLocalTimestamp();
   };
 
   const handleEditShortcut = (updatedShortcut) => {
@@ -235,20 +256,20 @@ function App() {
     );
     setShortcuts(newShortcuts);
     localStorage.setItem('shortcuts', JSON.stringify(newShortcuts));
-    localStorage.setItem('last_local_update', new Date().toISOString());
+    updateLocalTimestamp();
   };
 
   const handleReorderShortcuts = (newShortcuts) => {
     setShortcuts(newShortcuts);
     localStorage.setItem('shortcuts', JSON.stringify(newShortcuts));
-    localStorage.setItem('last_local_update', new Date().toISOString());
+    updateLocalTimestamp();
   };
 
   const handleBgConfigChange = (newConfig) => {
     setBgConfig(prev => {
       const updated = { ...prev, ...newConfig };
       localStorage.setItem('bg_config', JSON.stringify(updated));
-      localStorage.setItem('last_local_update', new Date().toISOString());
+      updateLocalTimestamp();
       return updated;
     });
   };
@@ -257,7 +278,7 @@ function App() {
     setGridConfig(prev => {
       const updated = { ...prev, ...newConfig };
       localStorage.setItem('grid_config', JSON.stringify(updated));
-      localStorage.setItem('last_local_update', new Date().toISOString());
+      updateLocalTimestamp();
       return updated;
     });
   };
@@ -318,6 +339,12 @@ function App() {
         };
         const result = await syncService.pushData(data);
         if (result) {
+          if (result.updatedAt) {
+            const numeric = Number(result.updatedAt);
+            if (Number.isFinite(numeric)) {
+              localStorage.setItem('last_local_update', String(numeric));
+            }
+          }
           console.log('Auto-sync completed');
         }
         // If result is null (offline), we silently skip

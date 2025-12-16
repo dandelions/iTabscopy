@@ -135,7 +135,7 @@ class SyncService {
         const result = await response.json();
 
         if (result.data) {
-            localStorage.setItem('last_sync', new Date().toISOString());
+            localStorage.setItem('last_sync', String(Date.now()));
         }
 
         return result.data;
@@ -172,7 +172,7 @@ class SyncService {
         }
 
         const result = await response.json();
-        localStorage.setItem('last_sync', new Date().toISOString());
+        localStorage.setItem('last_sync', String(Date.now()));
         return result;
     }
 
@@ -188,7 +188,19 @@ class SyncService {
 
     // Get last sync time
     getLastSync() {
-        return localStorage.getItem('last_sync');
+        const raw = localStorage.getItem('last_sync');
+        if (raw === null) return null;
+        const numeric = Number(raw);
+        if (Number.isFinite(numeric)) {
+            return numeric;
+        }
+        const parsed = Date.parse(raw);
+        if (Number.isFinite(parsed)) {
+            localStorage.setItem('last_sync', String(parsed));
+            return parsed;
+        }
+        localStorage.removeItem('last_sync');
+        return null;
     }
 
     // Save auth data
