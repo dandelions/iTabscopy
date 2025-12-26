@@ -72,12 +72,12 @@ const Popup = () => {
 
             // 3. Save to localStorage (Primary for App.jsx)
             localStorage.setItem('shortcuts', JSON.stringify(updatedShortcuts));
-            localStorage.setItem('last_local_update', new Date().toISOString());
+            localStorage.setItem('last_local_update', String(Date.now()));
 
             // 4. Save to chrome.storage.local (Backup)
             await chrome.storage.local.set({ shortcuts: updatedShortcuts });
             await chrome.storage.local.set({
-                last_local_update: new Date().toISOString()
+                last_local_update: String(Date.now())
             });
 
             setSaved(true);
