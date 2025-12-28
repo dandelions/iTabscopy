@@ -596,7 +596,7 @@ function App() {
         triggerTab={settingsTrigger}
         onOpenChange={setIsSettingsOpen}
       />
-      <div className={`fixed right-6 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center gap-3 liquid-glass-fixed rounded-2xl p-3 shadow-xl transition-all ${isSettingsOpen ? 'opacity-50 pointer-events-none scale-95' : 'opacity-100 pointer-events-auto scale-100'}`}>
+      <div className={`fixed right-6 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center gap-3 liquid-glass-fixed rounded-2xl p-3 shadow-xl transition-all ${isDivVisible ? 'opacity-100 pointer-events-auto scale-100' : 'opacity-0 pointer-events-none scale-95'}`}>
         <button
           onClick={() => setSettingsTrigger({ tab: 'shortcuts', at: Date.now() })}
           className="w-12 h-12 rounded-xl liquid-glass-mini hover:scale-110 hover:border-white/40 text-white flex items-center justify-center transition-all active:scale-95"
