@@ -600,13 +600,13 @@ function App() {
         {/* 切换面板的按钮始终可见 */}
             <button
                 onClick={handleToggleDiv}
-                className="mb-2 w-6 h-6 rounded-xl bg-blue-500 text-white flex items-center justify-center transition-all hover:bg-blue-600"
+                className="mb-2 w-4 h-4 rounded-xl bg-blue-500 text-white flex items-center justify-center transition-all hover:bg-blue-600"
                 title="切换面板"
             >
                 {isDivVisible ? (
-                    <Minus className="h-5 w-5" /> // 显示减号表示隐藏
+                    <Minus className="h-4 w-4" /> // 显示减号表示隐藏
                 ) : (
-                    <Plus className="h-2 w-2" /> // 显示加号表示显示
+                    <Plus className="h-4 w-4" /> // 显示加号表示显示
                 )}
             </button>
         {/* 只有在 isDivVisible 为 true 时才显示这个 div */}
