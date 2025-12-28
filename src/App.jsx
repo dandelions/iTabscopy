@@ -64,6 +64,12 @@ function App() {
     localStorage.setItem('last_local_update', String(Date.now()));
   };
 
+  /*隐藏右侧按钮*/
+  const [isDivVisible, setDivVisible] = useState(true); // 控制 div 显示的状态
+  const handleToggleDiv = () => {
+      setDivVisible(!isDivVisible); // 切换 div 的显示状态
+  };
+  
   // Normalize legacy ISO timestamps to numeric millis once on load
   useEffect(() => {
     const raw = localStorage.getItem('last_local_update');
@@ -591,7 +597,7 @@ function App() {
         triggerTab={settingsTrigger}
         onOpenChange={setIsSettingsOpen}
       />
-      <div className={`fixed right-6 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center gap-3 liquid-glass-fixed rounded-2xl p-3 shadow-xl transition-all ${isSettingsOpen ? 'opacity-50 pointer-events-none scale-95' : 'opacity-100 pointer-events-auto scale-100'}`}>
+      <div className={`fixed right-6 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center gap-3 liquid-glass-fixed rounded-2xl p-3 shadow-xl transition-all ${isDivVisible ? 'opacity-100 pointer-events-none scale-100' : 'opacity-0 pointer-events-auto scale-95'}`}>
         <button
           onClick={() => setSettingsTrigger({ tab: 'shortcuts', at: Date.now() })}
           className="w-12 h-12 rounded-xl liquid-glass-mini hover:scale-110 hover:border-white/40 text-white flex items-center justify-center transition-all active:scale-95"
@@ -637,6 +643,17 @@ function App() {
           title="数据管理"
         >
           <Database className="h-5 w-5" />
+        </button>
+        <button
+          onClick={handleToggleDiv} // 点击按钮切换 div 的显示状态
+          className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-blue-600 transition-all duration-200"
+          title="切换面板"
+        >
+          {isDivVisible ? (
+            <Minus className="w-4 h-4" /> // 显示减号表示隐藏
+          ) : (
+            <Plus className="w-4 h-4" /> // 显示加号表示显示
+          )}
         </button>
       </div>
 
