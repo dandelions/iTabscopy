@@ -38,7 +38,7 @@ function App() {
 
   const [shortcuts, setShortcuts] = useState([]);
   
-  const [isDivVisible, setDivVisible] = useState(true);
+  const [isDivVisible, setDivVisible] = useState(false);
   const handleToggleDiv = () => {
       setDivVisible(!isDivVisible);
   };
