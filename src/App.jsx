@@ -7,7 +7,7 @@ import TodoPanel from './components/TodoPanel';
 import NotesPanel from './components/NotesPanel';
 import DataManagement from './components/DataManagement';
 import { Toast } from './components/Toast';
-import { Globe, Settings as SettingsIcon, Cloud, ClipboardList, StickyNote, Plus, Database } from 'lucide-react';
+import { Globe, Settings as SettingsIcon, Cloud, ClipboardList, StickyNote, Plus, Minus, Database } from 'lucide-react';
 
 import { fetchRandomPhoto, getCachedImage, cacheImage } from './utils/unsplash';
 import { removeIconFromCache } from './utils/icons';
