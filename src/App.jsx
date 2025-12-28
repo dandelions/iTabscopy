@@ -63,12 +63,6 @@ function App() {
   const updateLocalTimestamp = () => {
     localStorage.setItem('last_local_update', String(Date.now()));
   };
-
-  /*隐藏右侧按钮*/
-  const [isDivVisible, setDivVisible] = useState(true); // 控制 div 显示的状态
-  const handleToggleDiv = () => {
-      setDivVisible(!isDivVisible); // 切换 div 的显示状态
-  };
   
   // Normalize legacy ISO timestamps to numeric millis once on load
   useEffect(() => {
@@ -643,18 +637,7 @@ function App() {
           title="数据管理"
         >
           <Database className="h-5 w-5" />
-        </button>
-        <button
-          onClick={handleToggleDiv} // 点击按钮切换 div 的显示状态
-          className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-blue-600 transition-all duration-200"
-          title="切换面板"
-        >
-          {isDivVisible ? (
-            <Minus className="w-4 h-4" /> // 显示减号表示隐藏
-          ) : (
-            <Plus className="w-4 h-4" /> // 显示加号表示显示
-          )}
-        </button>
+        </button>        
       </div>
 
       <TodoPanel
