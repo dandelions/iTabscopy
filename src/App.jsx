@@ -660,7 +660,6 @@ function App() {
             </button>   
         )}
       </div>
-      );
 
       <TodoPanel
         todos={todos}
