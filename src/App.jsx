@@ -37,6 +37,11 @@ function App() {
   });
 
   const [shortcuts, setShortcuts] = useState([]);
+  
+  const [isDivVisible, setDivVisible] = useState(true);
+  const handleToggleDiv = () => {
+      setDivVisible(!isDivVisible);
+  };
   const [settingsTrigger, setSettingsTrigger] = useState(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [todos, setTodos] = useState(() => {
@@ -637,7 +642,18 @@ function App() {
           title="数据管理"
         >
           <Database className="h-5 w-5" />
-        </button>        
+        </button>   
+        <button
+            onClick={handleToggleDiv}
+            className="mt-4 w-12 h-12 rounded-xl bg-blue-500 text-white flex items-center justify-center transition-all hover:bg-blue-600"
+            title="切换面板"
+        >
+            {isDivVisible ? (
+                <Minus className="h-5 w-5" /> // 显示减号表示隐藏
+            ) : (
+                <Plus className="h-5 w-5" /> // 显示加号表示显示
+            )}
+        </button>
       </div>
 
       <TodoPanel
