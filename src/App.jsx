@@ -600,7 +600,7 @@ function App() {
         {/* 切换面板的按钮始终可见 */}
             <button
                 onClick={handleToggleDiv}
-                className="mb-2 w-12 h-12 rounded-xl bg-blue-500 text-white flex items-center justify-center transition-all hover:bg-blue-600"
+                className="mb-2 w-6 h-6 rounded-xl bg-blue-500 text-white flex items-center justify-center transition-all hover:bg-blue-600"
                 title="切换面板"
             >
                 {isDivVisible ? (
