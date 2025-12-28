@@ -596,65 +596,71 @@ function App() {
         triggerTab={settingsTrigger}
         onOpenChange={setIsSettingsOpen}
       />
-      <div className={`fixed right-6 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center gap-3 liquid-glass-fixed rounded-2xl p-3 shadow-xl transition-all ${isDivVisible ? 'opacity-100 pointer-events-auto scale-100' : 'opacity-0 pointer-events-none scale-95'}`}>
-        <button
-          onClick={() => setSettingsTrigger({ tab: 'shortcuts', at: Date.now() })}
-          className="w-12 h-12 rounded-xl liquid-glass-mini hover:scale-110 hover:border-white/40 text-white flex items-center justify-center transition-all active:scale-95"
-          title="添加"
-        >
-          <Plus className="h-5 w-5" />
-        </button>
-        <button
-          onClick={() => setIsNotesOpen(prev => !prev)}
-          className="w-12 h-12 rounded-xl liquid-glass-mini hover:scale-110 hover:border-white/40 text-white flex items-center justify-center transition-all active:scale-95"
-          title="笔记"
-        >
-          <StickyNote className="h-5 w-5" />
-        </button>        
-        <button
-          onClick={handleTodoDockClick}
-          className="w-12 h-12 rounded-xl liquid-glass-mini hover:scale-110 hover:border-white/40 text-white flex items-center justify-center transition-all active:scale-95"
-          title="待办列表"
-        >
-          <ClipboardList className="h-5 w-5" />
-        </button>
-        <button
-          onClick={() => setSettingsTrigger({ tab: 'general', at: Date.now() })}
-          className="w-12 h-12 rounded-xl liquid-glass-mini hover:scale-110 hover:border-white/40 text-white flex items-center justify-center transition-all active:scale-95"
-          title="通用"
-        >
-          <SettingsIcon className="h-5 w-5" />
-        </button>        
-        <button
-          onClick={() => setSettingsTrigger({ tab: 'sync', at: Date.now() })}
-          className="w-12 h-12 rounded-xl liquid-glass-mini hover:scale-110 hover:border-white/40 flex items-center justify-center transition-all active:scale-95"
-          title="同步"
-        >
-          <Cloud className={`h-5 w-5 transition-colors ${
-            !isLoggedIn ? 'text-white' : 
-            !isOnline ? 'text-red-400' : 
-            'text-green-400'
-          }`} />
-        </button>
-        <button
-          onClick={() => setIsDataManagementOpen(prev => !prev)}
-          className="w-12 h-12 rounded-xl liquid-glass-mini hover:scale-110 hover:border-white/40 text-white flex items-center justify-center transition-all active:scale-95"
-          title="数据管理"
-        >
-          <Database className="h-5 w-5" />
-        </button>   
-        <button
-            onClick={handleToggleDiv}
-            className="mt-4 w-12 h-12 rounded-xl bg-blue-500 text-white flex items-center justify-center transition-all hover:bg-blue-600"
-            title="切换面板"
-        >
-            {isDivVisible ? (
-                <Minus className="h-5 w-5" /> // 显示减号表示隐藏
-            ) : (
-                <Plus className="h-5 w-5" /> // 显示加号表示显示
-            )}
-        </button>
+      <div className="fixed right-6 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center gap-3 liquid-glass-fixed rounded-2xl p-3 shadow-xl transition-all ">
+        {/* 切换面板的按钮始终可见 */}
+            <button
+                onClick={handleToggleDiv}
+                className="mb-2 w-12 h-12 rounded-xl bg-blue-500 text-white flex items-center justify-center transition-all hover:bg-blue-600"
+                title="切换面板"
+            >
+                {isDivVisible ? (
+                    <Minus className="h-5 w-5" /> // 显示减号表示隐藏
+                ) : (
+                    <Plus className="h-5 w-5" /> // 显示加号表示显示
+                )}
+            </button>
+        {/* 只有在 isDivVisible 为 true 时才显示这个 div */}
+        {isDivVisible && (
+            <div className="opacity-100 pointer-events-auto scale-100">
+            <button
+              onClick={() => setSettingsTrigger({ tab: 'shortcuts', at: Date.now() })}
+              className="w-12 h-12 rounded-xl liquid-glass-mini hover:scale-110 hover:border-white/40 text-white flex items-center justify-center transition-all active:scale-95"
+              title="添加"
+            >
+              <Plus className="h-5 w-5" />
+            </button>
+            <button
+              onClick={() => setIsNotesOpen(prev => !prev)}
+              className="w-12 h-12 rounded-xl liquid-glass-mini hover:scale-110 hover:border-white/40 text-white flex items-center justify-center transition-all active:scale-95"
+              title="笔记"
+            >
+              <StickyNote className="h-5 w-5" />
+            </button>        
+            <button
+              onClick={handleTodoDockClick}
+              className="w-12 h-12 rounded-xl liquid-glass-mini hover:scale-110 hover:border-white/40 text-white flex items-center justify-center transition-all active:scale-95"
+              title="待办列表"
+            >
+              <ClipboardList className="h-5 w-5" />
+            </button>
+            <button
+              onClick={() => setSettingsTrigger({ tab: 'general', at: Date.now() })}
+              className="w-12 h-12 rounded-xl liquid-glass-mini hover:scale-110 hover:border-white/40 text-white flex items-center justify-center transition-all active:scale-95"
+              title="通用"
+            >
+              <SettingsIcon className="h-5 w-5" />
+            </button>        
+            <button
+              onClick={() => setSettingsTrigger({ tab: 'sync', at: Date.now() })}
+              className="w-12 h-12 rounded-xl liquid-glass-mini hover:scale-110 hover:border-white/40 flex items-center justify-center transition-all active:scale-95"
+              title="同步"
+            >
+              <Cloud className={`h-5 w-5 transition-colors ${
+                !isLoggedIn ? 'text-white' : 
+                !isOnline ? 'text-red-400' : 
+                'text-green-400'
+              }`} />
+            </button>
+            <button
+              onClick={() => setIsDataManagementOpen(prev => !prev)}
+              className="w-12 h-12 rounded-xl liquid-glass-mini hover:scale-110 hover:border-white/40 text-white flex items-center justify-center transition-all active:scale-95"
+              title="数据管理"
+            >
+              <Database className="h-5 w-5" />
+            </button>   
+        )}
       </div>
+      );
 
       <TodoPanel
         todos={todos}
