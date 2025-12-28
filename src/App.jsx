@@ -606,7 +606,7 @@ function App() {
                 {isDivVisible ? (
                     <Minus className="h-5 w-5" /> // 显示减号表示隐藏
                 ) : (
-                    <Plus className="h-5 w-5" /> // 显示加号表示显示
+                    <Plus className="h-2 w-2" /> // 显示加号表示显示
                 )}
             </button>
         {/* 只有在 isDivVisible 为 true 时才显示这个 div */}
