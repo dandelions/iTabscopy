@@ -252,6 +252,9 @@ const SortableShortcutItem = ({
                 e.preventDefault();
                 setContextShortcutId(shortcut.id);
             }}
+            onPointerDown={handlePointerDown}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={handlePointerLeave}
         >
             <div className="relative">
                 <ShortcutIcon 
