@@ -687,7 +687,7 @@ function App() {
         )}
           <button
             onClick={handleToggleDiv}
-            className="mb-2 w-4 h-4 rounded-xl liquid-glass-mini text-white flex items-center justify-center transition-all hover:scale-110"
+            className="w-12 h-12 rounded-xl liquid-glass-mini hover:scale-110 hover:border-white/40 text-white flex items-center justify-center transition-all active:scale-95"
             title="切换面板"
             >
             <Menu className="h-5 w-5" /> {/* 使用 Menu 图标 */}
