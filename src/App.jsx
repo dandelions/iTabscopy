@@ -58,12 +58,24 @@ function App() {
   const [shortcuts, setShortcuts] = useState([]);
   
   const [isDivVisible, setDivVisible] = useState(false);
+  const menuRef = useRef(null);
+  
   const handleToggleDiv = () => {
       setDivVisible(!isDivVisible);
   };
 
-  
+  const handleClickOutside = (event) => {
+        if (menuRef.current && !menuRef.current.contains(event.target)) {
+            setIsDivVisible(false);
+        }
+  };
 
+  useEffect(() => {
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
   
   const [settingsTrigger, setSettingsTrigger] = useState(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -621,6 +633,7 @@ function App() {
       />
       <div className="fixed right-6 bottom-6 z-30 flex flex-col items-center gap-3 liquid-glass-fixed rounded-2xl p-3 shadow-xl transition-all ">
         {/* 切换面板的按钮始终可见 */}
+          <div ref={menuRef}>
             <button
                 onClick={handleToggleDiv}
                 className="mb-2 w-4 h-4 rounded-xl liquid-glass-mini text-white flex items-center justify-center transition-all hover:scale-110"
@@ -679,6 +692,7 @@ function App() {
             </button>   
           </div>
         )}
+        </div>
       </div>
 
       <TodoPanel
