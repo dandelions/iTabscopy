@@ -179,6 +179,8 @@ const SortableShortcutItem = ({
 
     // 处理按下事件
     const handlePointerDown = (e) => {
+        // 只在左键点击时处理
+        if (e.button !== 0) return;
         setIsPressing(true);
         pressTimeoutRef.current = setTimeout(() => {
             setEditingShortcut(shortcut);
