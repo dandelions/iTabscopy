@@ -151,10 +151,10 @@ export default function NotesPanel({
                 onClick={() => onOpenChange?.(false)}
             />
             <div
-                className={`absolute top-0 right-0 h-full w-[820px] bg-white/10 backdrop-blur-2xl border-l border-white/15 shadow-2xl flex rounded-l-2xl overflow-hidden transform transition-transform duration-300 ease-out ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}
+                className={`absolute top-0 right-0 h-full max-w-full w-full md:w-[820px] bg-white/10 backdrop-blur-2xl border-l border-white/15 shadow-2xl flex rounded-l-2xl overflow-hidden transform transition-transform duration-300 ease-out ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}
             >
                 {/* Left list */}
-                <div className="w-72 border-r border-white/10 bg-black/20">
+                <div className="w-full md:w-72 border-r border-white/10 bg-black/20">
                     <div className="px-4 py-4 border-b border-white/10 space-y-3">
                         <div className="flex items-center justify-between">
                             <h3 className="text-sm font-semibold text-white">笔记</h3>
