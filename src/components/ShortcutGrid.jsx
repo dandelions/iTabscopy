@@ -171,6 +171,67 @@ const SortableShortcutItem = ({
         opacity: isSortableDragging ? 0 : 1,
     };
 
+        const handlePointerDown = (e) => {
+        // 只在左键点击或触摸时处理
+        if (e.button !== 0 && e.type !== 'touchstart') return;
+
+        setIsPressing(true);
+        setInitialPosition({ x: e.clientX, y: e.clientY });
+        pressTimeoutRef.current = setTimeout(() => {
+            setIsPressing(false);
+            // 触发编辑逻辑
+            setEditingShortcut(shortcut);
+        }, 2000); // 2000ms 长按触发编辑
+    };
+
+    const handlePointerMove = (e) => {
+        if (isPressing) {
+            const deltaX = e.clientX - initialPosition.x;
+            const deltaY = e.clientY - initialPosition.y;
+            if (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10) {
+                // 触发拖动逻辑
+                setIsDragging(true);
+                clearTimeout(pressTimeoutRef.current); // 取消编辑逻辑
+            }
+        }
+    };
+
+    const handlePointerUp = (e) => {
+        if (isDragging) {
+            // 处理拖动结束逻辑
+            setIsDragging(false);
+        } else {
+            // 处理点击逻辑
+            if (shortcut.type === 'folder') {
+                onOpenFolder(shortcut);
+            } else {
+                window.location.href = shortcut.url;
+            }
+        }
+
+        if (pressTimeoutRef.current) {
+            clearTimeout(pressTimeoutRef.current);
+        }
+        setIsPressing(false);
+    };
+
+    const handlePointerLeave = () => {
+        if (pressTimeoutRef.current) {
+            clearTimeout(pressTimeoutRef.current);
+        }
+        setIsPressing(false);
+        setIsDragging(false);
+    };
+
+    // 清理定时器
+    useEffect(() => {
+        return () => {
+            if (pressTimeoutRef.current) {
+                clearTimeout(pressTimeoutRef.current);
+            }
+        };
+    }, []);
+
     return (
         <div
             data-shortcut-id={shortcut.id}
