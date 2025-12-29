@@ -233,6 +233,7 @@ const SortableShortcutItem = ({
 
     const handleEditClick = (e) => {
         if (e.button === 0) {
+            console.log(e)
             e.preventDefault(); // 阻止默认行为
             e.stopPropagation(); // 阻止事件冒泡，防止触发链接打开    
             setEditingShortcut(shortcut); // 触发编辑逻辑
