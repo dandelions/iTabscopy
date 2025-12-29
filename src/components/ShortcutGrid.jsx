@@ -220,7 +220,7 @@ const SortableShortcutItem = ({
         isDragging,
     } = useSortable({ 
         id: shortcut.id,
-        disabled: isPressing // 当正在长按时禁用拖动
+        //disabled: isPressing
     });
 
     const style = {
@@ -251,20 +251,6 @@ const SortableShortcutItem = ({
             onContextMenu={(e) => {
                 e.preventDefault();
                 setContextShortcutId(shortcut.id);
-            }}
-            onPointerDown={handlePointerDown}
-            onPointerUp={handlePointerUp}
-            onPointerLeave={handlePointerLeave}
-            tabIndex={0}
-            role="button"
-            onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                    if (shortcut.type === 'folder') {
-                        onOpenFolder(shortcut);
-                    } else {
-                        window.location.href = shortcut.url;
-                    }
-                }
             }}
         >
             <div className="relative">
