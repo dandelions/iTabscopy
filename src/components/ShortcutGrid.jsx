@@ -232,6 +232,7 @@ const SortableShortcutItem = ({
     };
 
     const handleEditClick = (e) => {
+        e.preventDefault(); // 阻止默认行为
         e.stopPropagation(); // 阻止事件冒泡，防止触发链接打开
         setEditingShortcut(shortcut); // 触发编辑逻辑
     };
@@ -272,7 +273,6 @@ const SortableShortcutItem = ({
                     isContextOpen={contextShortcutId === shortcut.id}
                     onRemove={onRemoveShortcut}
                     onEdit={handleEditClick} // 修改为使用 handleEditClick
-                    setContextShortcutId={setContextShortcutId}
                 />
                 {isMergeTarget && (
                     <div 
