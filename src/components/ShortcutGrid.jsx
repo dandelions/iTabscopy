@@ -249,10 +249,7 @@ const SortableShortcutItem = ({
             {...listeners}
             className="group relative flex flex-col items-center gap-3 transition-all duration-300 hover:scale-105 hover:z-10 justify-self-center h-fit touch-none"
             
-            onContextMenu={(e) => {
-                e.preventDefault();
-                setContextShortcutId(shortcut.id);
-            }}
+            onContextMenu={handleContextMenu} // 处理右键菜单
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
