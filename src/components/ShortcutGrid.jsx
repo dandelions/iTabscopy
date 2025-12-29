@@ -37,6 +37,31 @@ const calculateGaps = (cols, rows) => {
     return { colGap, rowGap };
 };
 
+// 1. 创建自定义的 MouseSensor
+class CustomMouseSensor extends MouseSensor {
+  static activators = [
+    {
+      eventName: 'mousedown',
+      handler: ({ nativeEvent: event }) => {
+        if (event.button !== 0) return false; // 只处理左键点击
+        return true;
+      },
+    },
+  ];
+}
+
+// 2. 创建自定义的 TouchSensor
+class CustomTouchSensor extends TouchSensor {
+  static activators = [
+    {
+      eventName: 'touchstart',
+      handler: ({ nativeEvent: event }) => {
+        return true;
+      },
+    },
+  ];
+}
+
 const ShortcutIcon = ({ shortcut, iconSize, isContextOpen, onRemove, onEdit, setContextShortcutId }) => {
     if (shortcut.type === 'folder') {
         return <FolderIcon folder={shortcut} iconSize={iconSize} />;
@@ -149,6 +174,43 @@ const SortableShortcutItem = ({
     onOpenFolder,
     isMergeTarget
 }) => {
+    const pressTimeoutRef = useRef(null);
+    const [isPressing, setIsPressing] = useState(false);
+
+    // 处理按下事件
+    const handlePointerDown = (e) => {
+        setIsPressing(true);
+        pressTimeoutRef.current = setTimeout(() => {
+            setEditingShortcut(shortcut);
+            setIsPressing(false);
+        }, 500); // 500ms 长按触发编辑
+    };
+
+    // 处理松开事件
+    const handlePointerUp = () => {
+        if (pressTimeoutRef.current) {
+            clearTimeout(pressTimeoutRef.current);
+        }
+        setIsPressing(false);
+    };
+
+    // 处理移出事件
+    const handlePointerLeave = () => {
+        if (pressTimeoutRef.current) {
+            clearTimeout(pressTimeoutRef.current);
+        }
+        setIsPressing(false);
+    };
+
+    // 清理定时器
+    useEffect(() => {
+        return () => {
+            if (pressTimeoutRef.current) {
+                clearTimeout(pressTimeoutRef.current);
+            }
+        };
+    }, []);
+
     const {
         attributes,
         listeners,
@@ -156,7 +218,10 @@ const SortableShortcutItem = ({
         transform,
         transition,
         isDragging,
-    } = useSortable({ id: shortcut.id });
+    } = useSortable({ 
+        id: shortcut.id,
+        disabled: isPressing // 当正在长按时禁用拖动
+    });
 
     const style = {
         transform: CSS.Transform.toString(transform),
@@ -187,6 +252,9 @@ const SortableShortcutItem = ({
                 e.preventDefault();
                 setContextShortcutId(shortcut.id);
             }}
+            onPointerDown={handlePointerDown}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={handlePointerLeave}
             tabIndex={0}
             role="button"
             onKeyDown={(e) => {
@@ -262,14 +330,15 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
     }, []);
 
     const sensors = useSensors(
-        useSensor(MouseSensor, {
+        useSensor(CustomMouseSensor, {
             activationConstraint: {
-                distance: 10,
+                delay: 500, // 500ms 延迟，让长按有机会触发
+                tolerance: 5, // 允许轻微移动
             },
         }),
-        useSensor(TouchSensor, {
+        useSensor(CustomTouchSensor, {
             activationConstraint: {
-                delay: 250,
+                delay: 500,
                 tolerance: 5,
             },
         })
