@@ -150,6 +150,7 @@ const SortableShortcutItem = ({
     isMergeTarget
 }) => {
     const pressTimeoutRef = useRef(null);
+    const [isEditingMode, setIsEditingMode] = useState(false); // 新增状态
     const {
         attributes,
         listeners,
@@ -170,6 +171,7 @@ const SortableShortcutItem = ({
         setContextShortcutId(null); // 清除上下文菜单
         pressTimeoutRef.current = setTimeout(() => {
             setEditingShortcut(shortcut); // 触发编辑逻辑
+            setIsEditingMode(true); // 进入编辑模式
         }, 2000); // 2000ms 长按触发编辑
     };
 
@@ -185,6 +187,26 @@ const SortableShortcutItem = ({
 
         // PC端的点击逻辑
         setContextShortcutId(null); // 清除上下文菜单
+    };
+
+    const handleClick = (e) => {
+        if (isDragging || isEditingMode) {
+            e.stopPropagation(); // 阻止事件传播
+            return;
+        }
+
+        if (contextShortcutId === shortcut.id) return;
+        
+        if (shortcut.type === 'folder') {
+            onOpenFolder(shortcut);
+        } else {
+            window.location.href = shortcut.url;
+        }
+    };
+
+    const handleEditIconClick = (e) => {
+        e.stopPropagation(); // 阻止事件传播，确保不会触发图标链接
+        setEditingShortcut(shortcut); // 触发编辑逻辑
     };
 
     return (
