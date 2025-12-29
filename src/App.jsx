@@ -66,10 +66,10 @@ function App() {
 
   const handleClickOutside = (event) => {
         if (menuRef.current && !menuRef.current.contains(event.target)) {
-            setIsDivVisible(false);
+            setDivVisible(false); // 修改这里，使用 setDivVisible
         }
   };
-
+  
   useEffect(() => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
