@@ -18,6 +18,25 @@ import syncService from './services/syncService';
 const DEFAULT_BG_URL = 'https://images.unsplash.com/photo-1472214103451-9374bd1c798e?q=80&w=2070&auto=format&fit=crop';
 
 function App() {
+  // 动态更新视口高度
+  useEffect(() => {
+    const updateViewportHeight = () => {
+      const vh = window.innerHeight * 0.01; // 获取当前窗口高度的1%
+      document.documentElement.style.setProperty('--vh', `${vh}px`); // 设置CSS变量
+    };
+
+    // 初始设置
+    updateViewportHeight();
+
+    // 监听窗口大小变化
+    window.addEventListener('resize', updateViewportHeight);
+
+    return () => {
+      window.removeEventListener('resize', updateViewportHeight);
+    };
+  }, []);
+
+  
   const [bgUrl, setBgUrl] = useState(localStorage.getItem('bg_url') || DEFAULT_BG_URL);
   const [gridConfig, setGridConfig] = useState(() => {
     const saved = localStorage.getItem('grid_config');
@@ -42,6 +61,10 @@ function App() {
   const handleToggleDiv = () => {
       setDivVisible(!isDivVisible);
   };
+
+  
+
+  
   const [settingsTrigger, setSettingsTrigger] = useState(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [todos, setTodos] = useState(() => {
