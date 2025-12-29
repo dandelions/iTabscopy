@@ -217,16 +217,7 @@ const SortableShortcutItem = ({
             {...attributes}
             {...listeners}
             className="group relative flex flex-col items-center gap-3 transition-all duration-300 hover:scale-105 hover:z-10 justify-self-center h-fit touch-none"
-            onClick={() => {
-                if (isDragging) return;
-                if (contextShortcutId === shortcut.id) return;
-                
-                if (shortcut.type === 'folder') {
-                    onOpenFolder(shortcut);
-                } else {
-                    window.location.href = shortcut.url;
-                }
-            }}
+            onClick={handleClick}
             onContextMenu={(e) => {
                 e.preventDefault();
                 setContextShortcutId(shortcut.id);
@@ -254,7 +245,7 @@ const SortableShortcutItem = ({
                     iconSize={iconSize} 
                     isContextOpen={contextShortcutId === shortcut.id}
                     onRemove={onRemoveShortcut}
-                    onEdit={setEditingShortcut}
+                    onEdit={handleEditIconClick} // 修改为使用 handleEditIconClick
                     setContextShortcutId={setContextShortcutId}
                 />
                 {isMergeTarget && (
