@@ -237,7 +237,7 @@ const SortableShortcutItem = ({
             className="group relative flex flex-col items-center gap-3 transition-all duration-300 hover:scale-105 hover:z-10 justify-self-center h-fit touch-none"
             onClick={() => {
                 if (isDragging || isContextOpen) return;
-                if (contextShortcutId === shortcut.id) return;
+                //if (contextShortcutId === shortcut.id) return;
                 
                 if (shortcut.type === 'folder') {
                     onOpenFolder(shortcut);
