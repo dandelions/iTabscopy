@@ -633,7 +633,14 @@ function App() {
       />
       <div className="fixed right-6 bottom-6 z-30 flex flex-col items-center gap-3 liquid-glass-fixed rounded-2xl p-3 shadow-xl transition-all ">
         {/* 切换面板的按钮始终可见 */}
-          <div ref={menuRef}>           
+          <div ref={menuRef}>        
+          <button
+            onClick={handleToggleDiv}
+            className="mb-2 w-4 h-4 rounded-xl liquid-glass-mini text-white flex items-center justify-center transition-all hover:scale-110"
+            title="切换面板"
+            >
+            <Menu className="h-5 w-5" /> {/* 使用 Menu 图标 */}
+            </button>
         {/* 只有在 isDivVisible 为 true 时才显示这个 div */}
         {isDivVisible && (
             <div className="opacity-100 pointer-events-auto scale-100">
@@ -682,14 +689,7 @@ function App() {
               title="数据管理"
             >
               <Database className="h-5 w-5" />
-            </button>  
-           <button
-            onClick={handleToggleDiv}
-            className="mb-2 w-4 h-4 rounded-xl liquid-glass-mini text-white flex items-center justify-center transition-all hover:scale-110"
-            title="切换面板"
-            >
-            <Menu className="h-5 w-5" /> {/* 使用 Menu 图标 */}
-            </button>
+            </button>             
           </div>
         )}
         </div>
