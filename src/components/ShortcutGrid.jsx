@@ -139,6 +139,49 @@ const ShortcutIcon = ({ shortcut, iconSize, isContextOpen, onRemove, onEdit, set
     );
 };
 
+// 新增：自定义长按 Hook
+const useLongPress = (callback = () => {}, { delay = 300, moveThreshold = 10 } = {}) => {
+    const timeoutRef = useRef(null);
+    const startPosRef = useRef({ x: 0, y: 0 });
+
+    const handlePointerDown = useCallback((e) => {
+        // 记录起始位置
+        startPosRef.current = { x: e.clientX, y: e.clientY };
+        
+        // 设置计时器，在 delay 毫秒后执行回调
+        timeoutRef.current = setTimeout(() => {
+            callback(e);
+        }, delay);
+    }, [callback, delay]);
+
+    const clearTimer = useCallback(() => {
+        if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+            timeoutRef.current = null;
+        }
+    }, []);
+
+    const handlePointerMove = useCallback((e) => {
+        if (!timeoutRef.current) return;
+
+        const dx = Math.abs(e.clientX - startPosRef.current.x);
+        const dy = Math.abs(e.clientY - startPosRef.current.y);
+
+        // 如果移动超过阈值，则取消长按
+        if (dx > moveThreshold || dy > moveThreshold) {
+            clearTimer();
+        }
+    }, [clearTimer, moveThreshold]);
+
+    // 返回可以绑定到组件上的事件处理器
+    return {
+        onPointerDown: handlePointerDown,
+        onPointerUp: clearTimer,
+        onPointerLeave: clearTimer,
+        onPointerMove: handlePointerMove,
+    };
+};
+
 const SortableShortcutItem = ({ 
     shortcut, 
     iconSize, 
@@ -164,6 +207,21 @@ const SortableShortcutItem = ({
         zIndex: isDragging ? 50 : 'auto',
         opacity: isDragging ? 0 : 1,
     };
+    
+    // +++ 新增：为移动端设置长按事件
+    const longPressEvents = useLongPress(() => {
+        // 触发长按时，打开上下文菜单
+        setContextShortcutId(shortcut.id);
+    }, {
+        // 这里的 delay 最好比 dnd-kit 的 TouchSensor delay (250ms) 稍长一点
+        // 以确保在拖拽开始前有机会触发长按
+        delay: 300 
+    });
+
+    // +++ 优化：当上下文菜单打开时，禁用 dnd-kit 的拖拽监听器
+    // 这样可以防止在菜单打开后还能意外拖动图标
+    const isContextOpen = contextShortcutId === shortcut.id;
+    const dndListeners = isContextOpen ? {} : listeners;
 
     return (
         <div
@@ -171,10 +229,14 @@ const SortableShortcutItem = ({
             ref={setNodeRef}
             style={{ ...style, width: `${Math.max(iconSize + 40, 120)}px` }}
             {...attributes}
-            {...listeners}
+            // --- 修改：使用优化后的监听器
+            // {...listeners}
+            {...dndListeners} // +++
+            // +++ 新增：绑定长按和右键事件
+            {...longPressEvents}
             className="group relative flex flex-col items-center gap-3 transition-all duration-300 hover:scale-105 hover:z-10 justify-self-center h-fit touch-none"
             onClick={() => {
-                if (isDragging) return;
+                if (isDragging || isContextOpen) return;
                 if (contextShortcutId === shortcut.id) return;
                 
                 if (shortcut.type === 'folder') {
@@ -203,7 +265,9 @@ const SortableShortcutItem = ({
                 <ShortcutIcon 
                     shortcut={shortcut} 
                     iconSize={iconSize} 
-                    isContextOpen={contextShortcutId === shortcut.id}
+                    // --- 修改：直接使用 isContextOpen 变量
+                    // isContextOpen={contextShortcutId === shortcut.id}
+                    isContextOpen={isContextOpen} // +++
                     onRemove={onRemoveShortcut}
                     onEdit={setEditingShortcut}
                     setContextShortcutId={setContextShortcutId}
