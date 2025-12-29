@@ -149,6 +149,7 @@ const SortableShortcutItem = ({
     onOpenFolder,
     isMergeTarget
 }) => {
+    const pressTimeoutRef = useRef(null);
     const {
         attributes,
         listeners,
@@ -163,6 +164,27 @@ const SortableShortcutItem = ({
         transition,
         zIndex: isDragging ? 50 : 'auto',
         opacity: isDragging ? 0 : 1,
+    };
+
+    const handleTouchStart = (e) => {
+        setContextShortcutId(null); // 清除上下文菜单
+        pressTimeoutRef.current = setTimeout(() => {
+            setEditingShortcut(shortcut); // 触发编辑逻辑
+        }, 2000); // 2000ms 长按触发编辑
+    };
+
+    const handleTouchEnd = () => {
+        if (pressTimeoutRef.current) {
+            clearTimeout(pressTimeoutRef.current);
+        }
+    };
+
+    const handlePointerDown = (e) => {
+        // 只在左键点击时处理
+        if (e.button !== 0) return;
+
+        // PC端的点击逻辑
+        setContextShortcutId(null); // 清除上下文菜单
     };
 
     return (
@@ -187,6 +209,11 @@ const SortableShortcutItem = ({
                 e.preventDefault();
                 setContextShortcutId(shortcut.id);
             }}
+            
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+            onPointerDown={handlePointerDown}
+            
             tabIndex={0}
             role="button"
             onKeyDown={(e) => {
