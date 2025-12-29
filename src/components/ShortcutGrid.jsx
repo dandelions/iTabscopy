@@ -231,6 +231,11 @@ const SortableShortcutItem = ({
         setContextShortcutId(shortcut.id); // 设置上下文菜单的快捷方式ID
     };
 
+    const handleEditClick = (e) => {
+        e.stopPropagation(); // 阻止事件冒泡，防止触发链接打开
+        setEditingShortcut(shortcut); // 触发编辑逻辑
+    };
+
     // 清理定时器
     useEffect(() => {
         return () => {
@@ -266,7 +271,7 @@ const SortableShortcutItem = ({
                     iconSize={iconSize} 
                     isContextOpen={contextShortcutId === shortcut.id}
                     onRemove={onRemoveShortcut}
-                    onEdit={setEditingShortcut}
+                    onEdit={handleEditClick} // 修改为使用 handleEditClick
                     setContextShortcutId={setContextShortcutId}
                 />
                 {isMergeTarget && (
