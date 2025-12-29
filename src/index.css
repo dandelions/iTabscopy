@@ -293,6 +293,16 @@ body {
     opacity: 1;
 }
 
+@media (max-width: 640px) {
+    .markdown-preview {
+        font-size: 14px; /* 调整字体大小 */
+    }
+    .text-sm {
+        font-size: 12px; /* 调整小字体 */
+    }
+    /* 其他样式调整 */
+}
+
 /* Markdown Preview Styles */
 .markdown-preview {
     min-height: 100%;
