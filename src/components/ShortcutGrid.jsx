@@ -149,20 +149,26 @@ const SortableShortcutItem = ({
     onOpenFolder,
     isMergeTarget
 }) => {
+
+    const pressTimeoutRef = useRef(null);
+    const [isPressing, setIsPressing] = useState(false);
+    const [isDragging, setIsDragging] = useState(false);
+    const [initialPosition, setInitialPosition] = useState({ x: 0, y: 0 });
+    
     const {
         attributes,
         listeners,
         setNodeRef,
         transform,
         transition,
-        isDragging,
+        isDragging: isSortableDragging,
     } = useSortable({ id: shortcut.id });
 
     const style = {
         transform: CSS.Transform.toString(transform),
         transition,
-        zIndex: isDragging ? 50 : 'auto',
-        opacity: isDragging ? 0 : 1,
+        zIndex: isSortableDragging ? 50 : 'auto',
+        opacity: isSortableDragging ? 0 : 1,
     };
 
     return (
@@ -173,31 +179,20 @@ const SortableShortcutItem = ({
             {...attributes}
             {...listeners}
             className="group relative flex flex-col items-center gap-3 transition-all duration-300 hover:scale-105 hover:z-10 justify-self-center h-fit touch-none"
-            onClick={() => {
-                if (isDragging) return;
-                if (contextShortcutId === shortcut.id) return;
-                
-                if (shortcut.type === 'folder') {
-                    onOpenFolder(shortcut);
-                } else {
-                    window.location.href = shortcut.url;
-                }
-            }}
+            
             onContextMenu={(e) => {
                 e.preventDefault();
                 setContextShortcutId(shortcut.id);
             }}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={handlePointerLeave}
+            onTouchStart={handlePointerDown}
+            onTouchMove={handlePointerMove}
+            onTouchEnd={handlePointerUp}
             tabIndex={0}
             role="button"
-            onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                    if (shortcut.type === 'folder') {
-                        onOpenFolder(shortcut);
-                    } else {
-                        window.location.href = shortcut.url;
-                    }
-                }
-            }}
         >
             <div className="relative">
                 <ShortcutIcon 
