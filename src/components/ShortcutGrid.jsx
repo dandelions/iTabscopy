@@ -232,9 +232,9 @@ const SortableShortcutItem = ({
     };
 
     const handleEditClick = (e) => {
-        e.preventDefault(); // 阻止默认行为
-        e.stopPropagation(); // 阻止事件冒泡，防止触发链接打开
         setEditingShortcut(shortcut); // 触发编辑逻辑
+        e.preventDefault(); // 阻止默认行为
+        e.stopPropagation(); // 阻止事件冒泡，防止触发链接打开        
     };
 
     // 清理定时器
