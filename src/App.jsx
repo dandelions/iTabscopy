@@ -7,7 +7,7 @@ import TodoPanel from './components/TodoPanel';
 import NotesPanel from './components/NotesPanel';
 import DataManagement from './components/DataManagement';
 import { Toast } from './components/Toast';
-import { Globe, Settings as SettingsIcon, Cloud, ClipboardList, StickyNote, Plus, Minus, Database } from 'lucide-react';
+import { Globe, Settings as SettingsIcon, Cloud, ClipboardList, StickyNote, Plus, Minus, Database,Menu } from 'lucide-react';
 
 import { fetchRandomPhoto, getCachedImage, cacheImage } from './utils/unsplash';
 import { removeIconFromCache } from './utils/icons';
@@ -619,18 +619,14 @@ function App() {
         triggerTab={settingsTrigger}
         onOpenChange={setIsSettingsOpen}
       />
-      <div className="fixed right-6 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center gap-3 liquid-glass-fixed rounded-2xl p-3 shadow-xl transition-all ">
+      <div className="fixed right-6 bottom-6 z-30 flex flex-col items-center gap-3 liquid-glass-fixed rounded-2xl p-3 shadow-xl transition-all ">
         {/* 切换面板的按钮始终可见 */}
             <button
                 onClick={handleToggleDiv}
                 className="mb-2 w-4 h-4 rounded-xl liquid-glass-mini text-white flex items-center justify-center transition-all hover:scale-110"
                 title="切换面板"
             >
-                {isDivVisible ? (
-                    <Minus className="h-4 w-4" /> // 显示减号表示隐藏
-                ) : (
-                    <Plus className="h-4 w-4" /> // 显示加号表示显示
-                )}
+              <Menu className="h-5 w-5" /> {/* 使用 Menu 图标 */}
             </button>
         {/* 只有在 isDivVisible 为 true 时才显示这个 div */}
         {isDivVisible && (
