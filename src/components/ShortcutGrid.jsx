@@ -202,10 +202,12 @@ const SortableShortcutItem = ({
             setIsDragging(false);
         } else {
             // 处理点击逻辑
-            if (shortcut.type === 'folder') {
-                onOpenFolder(shortcut);
-            } else {
-                window.location.href = shortcut.url;
+            if (e.button === 0) { // 只处理左键点击
+                if (shortcut.type === 'folder') {
+                    onOpenFolder(shortcut);
+                } else {
+                    window.location.href = shortcut.url;
+                }
             }
         }
 
@@ -221,6 +223,12 @@ const SortableShortcutItem = ({
         }
         setIsPressing(false);
         setIsDragging(false);
+    };
+
+    // 右键菜单处理
+    const handleContextMenu = (e) => {
+        e.preventDefault(); // 阻止默认右键菜单
+        setContextShortcutId(shortcut.id); // 设置上下文菜单的快捷方式ID
     };
 
     // 清理定时器
