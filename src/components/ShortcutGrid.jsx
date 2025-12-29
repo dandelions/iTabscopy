@@ -149,8 +149,6 @@ const SortableShortcutItem = ({
     onOpenFolder,
     isMergeTarget
 }) => {
-    const pressTimeoutRef = useRef(null);
-    const [isEditingMode, setIsEditingMode] = useState(false); // 新增状态
     const {
         attributes,
         listeners,
@@ -167,48 +165,6 @@ const SortableShortcutItem = ({
         opacity: isDragging ? 0 : 1,
     };
 
-    const handleTouchStart = (e) => {
-        setContextShortcutId(null); // 清除上下文菜单
-        pressTimeoutRef.current = setTimeout(() => {
-            setEditingShortcut(shortcut); // 触发编辑逻辑
-            setIsEditingMode(true); // 进入编辑模式
-        }, 2000); // 2000ms 长按触发编辑
-    };
-
-    const handleTouchEnd = () => {
-        if (pressTimeoutRef.current) {
-            clearTimeout(pressTimeoutRef.current);
-        }
-    };
-
-    const handlePointerDown = (e) => {
-        // 只在左键点击时处理
-        if (e.button !== 0) return;
-
-        // PC端的点击逻辑
-        setContextShortcutId(null); // 清除上下文菜单
-    };
-
-    const handleClick = (e) => {
-        if (isDragging || isEditingMode) {
-            e.stopPropagation(); // 阻止事件传播
-            return;
-        }
-
-        if (contextShortcutId === shortcut.id) return;
-        
-        if (shortcut.type === 'folder') {
-            onOpenFolder(shortcut);
-        } else {
-            window.location.href = shortcut.url;
-        }
-    };
-
-    const handleEditIconClick = (e) => {
-        e.stopPropagation(); // 阻止事件传播，确保不会触发图标链接
-        setEditingShortcut(shortcut); // 触发编辑逻辑
-    };
-
     return (
         <div
             data-shortcut-id={shortcut.id}
@@ -217,16 +173,20 @@ const SortableShortcutItem = ({
             {...attributes}
             {...listeners}
             className="group relative flex flex-col items-center gap-3 transition-all duration-300 hover:scale-105 hover:z-10 justify-self-center h-fit touch-none"
-            onClick={handleClick}
+            onClick={() => {
+                if (isDragging) return;
+                if (contextShortcutId === shortcut.id) return;
+                
+                if (shortcut.type === 'folder') {
+                    onOpenFolder(shortcut);
+                } else {
+                    window.location.href = shortcut.url;
+                }
+            }}
             onContextMenu={(e) => {
                 e.preventDefault();
                 setContextShortcutId(shortcut.id);
             }}
-            
-            onTouchStart={handleTouchStart}
-            onTouchEnd={handleTouchEnd}
-            onPointerDown={handlePointerDown}
-            
             tabIndex={0}
             role="button"
             onKeyDown={(e) => {
@@ -245,7 +205,7 @@ const SortableShortcutItem = ({
                     iconSize={iconSize} 
                     isContextOpen={contextShortcutId === shortcut.id}
                     onRemove={onRemoveShortcut}
-                    onEdit={handleEditIconClick} // 修改为使用 handleEditIconClick
+                    onEdit={setEditingShortcut}
                     setContextShortcutId={setContextShortcutId}
                 />
                 {isMergeTarget && (
