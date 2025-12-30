@@ -11,6 +11,32 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { useIconSource } from '../hooks/useIconSource';
 
+// 长按 Hook
+const useLongPress = (callback, { delay = 300 } = {}) => {
+    const [isLongPress, setIsLongPress] = useState(false);
+    const timeoutRef = useRef(null);
+
+    const start = () => {
+        timeoutRef.current = setTimeout(() => {
+            setIsLongPress(true);
+            callback();
+        }, delay);
+    };
+
+    const clear = () => {
+        clearTimeout(timeoutRef.current);
+        setIsLongPress(false);
+    };
+
+    return {
+        onMouseDown: start,
+        onMouseUp: clear,
+        onMouseLeave: clear,
+        onTouchStart: start,
+        onTouchEnd: clear,
+    };
+};
+
 const SortableFolderItem = ({ shortcut, onRemove, onEdit, isContextOpen, setContextShortcutId }) => {
     const {
         attributes,
@@ -58,12 +84,20 @@ const SortableFolderItem = ({ shortcut, onRemove, onEdit, isContextOpen, setCont
         }
     };
 
+    // 使用长按 Hook
+    const longPressEvents = useLongPress(() => {
+        onEdit(shortcut); // 触发编辑功能
+    }, {
+        delay: 2000 // 设置长按时间为2秒
+    });
+
     return (
         <div
             ref={setNodeRef}
             style={style}
             {...attributes}
             {...listeners}
+            {...longPressEvents} // 绑定长按事件
             className="group relative flex flex-col items-center gap-2 p-2 rounded-xl transition-colors cursor-pointer"
             onContextMenu={(e) => {
                 e.preventDefault();
