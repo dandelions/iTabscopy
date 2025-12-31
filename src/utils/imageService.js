@@ -6,7 +6,7 @@
  * 我们使用一个反向代理来避免CORS问题。
  * @returns {Promise<{url: string} | null>} 包含壁纸URL的对象，或在失败时返回null。
  */
-export const fetchBingDailyPhoto = async () => {
+export const fetchBingDailyPhoto1 = async () => {
   // 使用一个可靠的第三方API或自建代理来获取Bing壁纸，避免直接请求bing.com可能遇到的CORS问题。
   // 'https://bing.img.run/rand.php' 是一个会重定向到随机Bing图片的服务。
   // 如果需要当天的图片，可以使用 'https://bing.img.run/uhd.php'
@@ -21,6 +21,31 @@ export const fetchBingDailyPhoto = async () => {
     // response.url 就是重定向后的最终图片URL
     const imageUrl = response.url;
     console.log('Fetched Bing Photo URL:', imageUrl);
+    return { url: imageUrl };
+  } catch (error) {
+    console.error('Failed to fetch Bing daily photo:', error);
+    return null;
+  }
+};
+
+export const fetchBingDailyPhoto = async () => {
+  // 必应每日壁纸API
+  const BING_API_URL = 'https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=1';
+
+  try {
+    // 发起请求获取壁纸数据
+    const response = await fetch(BING_API_URL);
+    if (!response.ok) {
+      throw new Error(`Network response was not ok, status: ${response.status}`);
+    }
+    
+    // 解析 JSON 数据
+    const data = await response.json();
+    
+    // 获取图片URL
+    const imageUrl = `https://www.bing.com${data.images[0].url}`;
+    console.log('Fetched Bing Photo URL:', imageUrl);
+    
     return { url: imageUrl };
   } catch (error) {
     console.error('Failed to fetch Bing daily photo:', error);
