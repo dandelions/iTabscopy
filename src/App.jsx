@@ -334,13 +334,7 @@ function App() {
       if (lastFetch !== today) {
         let photo;
         if (bgSource === 'bing') {
-          console.log('Fetching Bing daily wallpaper...');
-          photo = await fetchBingDailyPhoto();
-          if (photo) {
-            setBgUrl(photo.url);
-            localStorage.setItem('bg_url', photo.url);
-            cacheBingImage(photo.url);
-          }
+          setBgUrl(photo.url);
         } else {
           console.log('Fetching Unsplash random photo...');
           photo = await fetchRandomPhoto();
@@ -361,14 +355,14 @@ function App() {
   const handleChangeWallpaper = useCallback(async (source = 'bing') => {
     setToast({ message: '正在获取新壁纸...', type: 'info' });
     let photo;
-    photo = await fetchBingDailyPhoto();
     console.log("从source:"+source+"更新壁纸")
-      if (photo) {
-      setBgUrl(photo.url);
+    setBgUrl(photo.url);
+    /*
       localStorage.setItem('bg_url', photo.url);
       localStorage.setItem('bg_last_fetch', new Date().toDateString());
       cacheBingImage(photo.url); // 预加载图片
       setToast({ message: '壁纸已更新', type: 'success' });
+      */
       updateLocalTimestamp(); // 触发云同步
     } else {
       setToast({ message: '获取壁纸失败，请稍后再试', type: 'error' });
