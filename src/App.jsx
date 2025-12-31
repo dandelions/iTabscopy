@@ -358,10 +358,10 @@ function App() {
   }, [bgSource]);
 
   // --- 新增: 手动更换壁纸的函数 ---
-  const handleChangeWallpaper = useCallback(async () => {
+  const handleChangeWallpaper = useCallback(async (source = 'bing') => {
     setToast({ message: '正在获取新壁纸...', type: 'info' });
     let photo;
-    if (bgSource === 'bing') {
+    if (source === 'bing') {
       photo = await fetchBingDailyPhoto();
     } else {
       photo = await fetchRandomPhoto();
@@ -370,13 +370,17 @@ function App() {
       setBgUrl(photo.url);
       localStorage.setItem('bg_url', photo.url);
       localStorage.setItem('bg_last_fetch', new Date().toDateString());
+      if(source === 'bing'){
       cacheBingImage(photo.url); // 预加载图片
+      }else{
+      cacheImage(photo.url); // 预加载图片
+      }
       setToast({ message: '壁纸已更新', type: 'success' });
       updateLocalTimestamp(); // 触发云同步
     } else {
       setToast({ message: '获取壁纸失败，请稍后再试', type: 'error' });
     }
-  }, [bgSource]);
+  }, []);
 
   // Disable browser back/forward gestures (two-finger swipe on trackpad)
   useEffect(() => {
