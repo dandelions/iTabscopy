@@ -46,6 +46,7 @@ const Settings = ({
             photo = await fetchRandomPhoto();
         }
         if (photo) {
+            console.log("bgSource:"+bgSource+"获取壁纸")
             localStorage.setItem('bg_url', photo.url);
             localStorage.setItem('bg_last_fetch', new Date().toDateString());
             if (bgSource === 'bing') {
