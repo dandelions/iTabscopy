@@ -5,7 +5,7 @@ import WallpaperModal from './WallpaperModal';
 import IconSelector from './IconSelector';
 import ToastContainer, { useToast } from './Toast';
 import syncService from '../services/syncService';
-import { fetchBingDailyPhoto, fetchRandomPhoto, cacheImage } from '../utils/imageService'; // 确保路径正确
+import { fetchBingDailyPhoto, fetchRandomPhoto as fetchBingRandomPhoto, cacheImage as cacheBingImage } from '../utils/imageService'; // 确保路径正确
 
 
 const Settings = ({
@@ -48,7 +48,11 @@ const Settings = ({
         if (photo) {
             localStorage.setItem('bg_url', photo.url);
             localStorage.setItem('bg_last_fetch', new Date().toDateString());
-            cacheImage(photo.url);
+            if (bgSource === 'bing') {
+                cacheBingImage(photo.url);
+            }else{
+                cacheImage(photo.url);
+            }
             if (onBgUpdate) onBgUpdate(photo.url);
         }
         setIsLoadingBg(false);
