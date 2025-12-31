@@ -30,7 +30,7 @@ const Settings = ({
     const [isLoggedIn, setIsLoggedIn] = useState(syncService.isLoggedIn());
     const [userEmail, setUserEmail] = useState(syncService.getEmail());
     const [isSyncing, setIsSyncing] = useState(false);
-    const [bgSource, setBgSource] = useState(localStorage.getItem('bg_source') || 'unsplash'); // 新增: 壁纸来源状态
+    const [bgSource, setBgSource] = useState(localStorage.getItem('bg_source') || 'bing'); // 新增: 壁纸来源状态
 
     const handleBgRefresh = async () => {
         setIsLoadingBg(true);
