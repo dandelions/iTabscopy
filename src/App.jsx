@@ -366,14 +366,15 @@ function App() {
     } else {
       photo = await fetchRandomPhoto();
     }
-    if (photo) {
+    console.log("从source:"+source+"更新壁纸")
+      if (photo) {
       setBgUrl(photo.url);
       localStorage.setItem('bg_url', photo.url);
       localStorage.setItem('bg_last_fetch', new Date().toDateString());
       if(source === 'bing'){
-      cacheBingImage(photo.url); // 预加载图片
+        cacheBingImage(photo.url); // 预加载图片
       }else{
-      cacheImage(photo.url); // 预加载图片
+        cacheImage(photo.url); // 预加载图片
       }
       setToast({ message: '壁纸已更新', type: 'success' });
       updateLocalTimestamp(); // 触发云同步
