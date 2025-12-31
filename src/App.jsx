@@ -10,6 +10,7 @@ import { Toast } from './components/Toast';
 import { Globe, Settings as SettingsIcon, Cloud, ClipboardList, StickyNote, Plus, Minus, Database,Menu } from 'lucide-react';
 
 import { fetchRandomPhoto, getCachedImage, cacheImage } from './utils/unsplash';
+import { fetchBingDailyPhoto, cacheImage as cacheBingImage } from './utils/imageService';
 import { removeIconFromCache } from './utils/icons';
 
 // import { arrayMove } from '@dnd-kit/sortable';
@@ -38,6 +39,7 @@ function App() {
 
   
   const [bgUrl, setBgUrl] = useState(localStorage.getItem('bg_url') || DEFAULT_BG_URL);
+  const [bgSource, setBgSource] = useState(localStorage.getItem('bg_source') || 'unsplash'); // 新增: 壁纸来源状态
   const [gridConfig, setGridConfig] = useState(() => {
     const saved = localStorage.getItem('grid_config');
     return saved ? JSON.parse(saved) : {
@@ -330,19 +332,51 @@ function App() {
       const today = new Date().toDateString();
 
       if (lastFetch !== today) {
-        const photo = await fetchRandomPhoto();
-        if (photo) {
-          setBgUrl(photo.url);
-          localStorage.setItem('bg_url', photo.url);
-          localStorage.setItem('bg_last_fetch', today);
-          // Cache it
-          cacheImage(photo.url);
+        let photo;
+        if (bgSource === 'bing') {
+          console.log('Fetching Bing daily wallpaper...');
+          photo = await fetchBingDailyPhoto();
+          if (photo) {
+            setBgUrl(photo.url);
+            localStorage.setItem('bg_url', photo.url);
+            cacheBingImage(photo.url);
+          }
+        } else {
+          console.log('Fetching Unsplash random photo...');
+          photo = await fetchRandomPhoto();
+          if (photo) {
+            setBgUrl(photo.url);
+            localStorage.setItem('bg_url', photo.url);            
+            // Cache it
+            cacheImage(photo.url);
+          }
         }
+        localStorage.setItem('bg_last_fetch', today);
       }
     };
-
     loadBackground();
-  }, []);
+  }, [bgSource]);
+
+  // --- 新增: 手动更换壁纸的函数 ---
+  const handleChangeWallpaper = useCallback(async () => {
+    setToast({ message: '正在获取新壁纸...', type: 'info' });
+    let photo;
+    if (bgSource === 'bing') {
+      photo = await fetchBingDailyPhoto();
+    } else {
+      photo = await fetchRandomPhoto();
+    }
+    if (photo) {
+      setBgUrl(photo.url);
+      localStorage.setItem('bg_url', photo.url);
+      localStorage.setItem('bg_last_fetch', new Date().toDateString());
+      cacheBingImage(photo.url); // 预加载图片
+      setToast({ message: '壁纸已更新', type: 'success' });
+      updateLocalTimestamp(); // 触发云同步
+    } else {
+      setToast({ message: '获取壁纸失败，请稍后再试', type: 'error' });
+    }
+  }, [bgSource]);
 
   // Disable browser back/forward gestures (two-finger swipe on trackpad)
   useEffect(() => {
@@ -630,6 +664,8 @@ function App() {
         onSyncPull={pullFromCloud}
         triggerTab={settingsTrigger}
         onOpenChange={setIsSettingsOpen}
+        bgSource={bgSource} // 传递当前壁纸来源
+        onBgSourceChange={setBgSource} // 传递修改壁纸来源的函数
       />
       <div className="fixed right-6 bottom-6 z-30 flex flex-col items-center gap-3 liquid-glass-fixed rounded-2xl p-3 shadow-xl transition-all ">
         {/* 切换面板的按钮始终可见 */}
@@ -637,6 +673,13 @@ function App() {
         {/* 只有在 isDivVisible 为 true 时才显示这个 div */}
         {isDivVisible && (
             <div className="opacity-100 pointer-events-auto scale-100">
+            <button
+              onClick={handleChangeWallpaper}
+              className="w-12 h-12 rounded-xl liquid-glass-mini hover:scale-110 hover:border-white/40 text-white flex items-center justify-center transition-all active:scale-95"
+              title="更换壁纸"
+            >
+              <Globe className="h-5 w-5" />
+            </button>
             <button
               onClick={() => setSettingsTrigger({ tab: 'shortcuts', at: Date.now() })}
               className="w-12 h-12 rounded-xl liquid-glass-mini hover:scale-110 hover:border-white/40 text-white flex items-center justify-center transition-all active:scale-95"
