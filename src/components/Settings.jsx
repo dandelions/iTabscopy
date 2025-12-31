@@ -219,7 +219,7 @@ const Settings = ({
 
                                     {/* Background Settings */}
                                     <div className="pt-4 border-t border-white/10">
-                                        <h3 className="text-sm font-medium text-white mb-4">背景设置>bei'
+                                        <h3 className="text-sm font-medium text-white mb-4">背景设置></h3>
                                         <div className="space-y-6">
                                             {/* Blur Slider */}
                                             <div className="space-y-3">
