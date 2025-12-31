@@ -326,7 +326,7 @@ function App() {
   };
 
   useEffect(() => {
-    const loadBackground = async () => {
+    const loadBackground = async (bgSource='bing') => {
       // Check if we have a cached image for today
       const lastFetch = localStorage.getItem('bg_last_fetch');
       const today = new Date().toDateString();
