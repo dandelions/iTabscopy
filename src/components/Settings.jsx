@@ -18,9 +18,7 @@ const Settings = ({
     onRemoveShortcut,
     onSyncPull,
     triggerTab,
-    onOpenChange, 
-    bgSource, 
-    onBgSourceChange
+    onOpenChange
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [isWallpaperModalOpen, setIsWallpaperModalOpen] = useState(false);
@@ -32,6 +30,7 @@ const Settings = ({
     const [isLoggedIn, setIsLoggedIn] = useState(syncService.isLoggedIn());
     const [userEmail, setUserEmail] = useState(syncService.getEmail());
     const [isSyncing, setIsSyncing] = useState(false);
+    const [bgSource, setBgSource] = useState(localStorage.getItem('bg_source') || 'unsplash'); // 新增: 壁纸来源状态
 
     const handleBgRefresh = async () => {
         setIsLoadingBg(true);
@@ -220,7 +219,7 @@ const Settings = ({
 
                                     {/* Background Settings */}
                                     <div className="pt-4 border-t border-white/10">
-                                        <h3 className="text-sm font-medium text-white mb-4">Background</h3>
+                                        <h3 className="text-sm font-medium text-white mb-4">背景设置>bei'
                                         <div className="space-y-6">
                                             {/* Blur Slider */}
                                             <div className="space-y-3">
@@ -253,24 +252,24 @@ const Settings = ({
                                                     className="w-full accent-white/80 h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer"
                                                 />
                                             </div>
-
+                                            {/* Wallpaper Source Selector */}
+                                            <div className="space-y-3">
+                                                <label className="text-sm text-white/80">壁纸来源</label>
+                                                <select
+                                                    value={bgSource}
+                                                    onChange={(e) => {
+                                                        setBgSource(e.target.value);
+                                                        localStorage.setItem('bg_source', e.target.value); // 保存到 localStorage
+                                                    }}
+                                                    className="w-full bg-black/10 border border-white/10 rounded-lg py-2.5 px-4 text-white text-sm focus:outline-none focus:border-white/30 transition-colors"
+                                                >
+                                                    <option value="unsplash">Unsplash</option>
+                                                    <option value="bing">Bing</option>
+                                                </select>
+                                            </div>
                                             {/* Wallpaper Preview & Change */}
                                             <div className="space-y-3">
-                                                <label className="text-sm text-white/80">Wallpaper</label>
-                                                <div>
-                                                    <label htmlFor="bg-source">壁纸来源:</label>
-                                                    <select
-                                                      id="bg-source"
-                                                      value={bgSource}
-                                                      onChange={(e) => {
-                                                        onBgSourceChange(e.target.value);
-                                                        localStorage.setItem('bg_source', e.target.value); // 保存到 localStorage
-                                                      }}
-                                                    >
-                                                      <option value="unsplash">Unsplash</option>
-                                                      <option value="bing">Bing</option>
-                                                    </select>
-                                                </div>
+                                                <label className="text-sm text-white/80">Wallpaper</label>                                                
                                                 <div className="relative aspect-video w-full rounded-lg overflow-hidden border border-white/20 shadow-lg">
                                                     <img
                                                         src={localStorage.getItem('bg_url')}
