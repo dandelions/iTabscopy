@@ -18,7 +18,9 @@ const Settings = ({
     onRemoveShortcut,
     onSyncPull,
     triggerTab,
-    onOpenChange
+    onOpenChange, 
+    bgSource, 
+    onBgSourceChange
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [isWallpaperModalOpen, setIsWallpaperModalOpen] = useState(false);
@@ -255,6 +257,20 @@ const Settings = ({
                                             {/* Wallpaper Preview & Change */}
                                             <div className="space-y-3">
                                                 <label className="text-sm text-white/80">Wallpaper</label>
+                                                <div>
+                                                    <label htmlFor="bg-source">壁纸来源:</label>
+                                                    <select
+                                                      id="bg-source"
+                                                      value={bgSource}
+                                                      onChange={(e) => {
+                                                        onBgSourceChange(e.target.value);
+                                                        localStorage.setItem('bg_source', e.target.value); // 保存到 localStorage
+                                                      }}
+                                                    >
+                                                      <option value="unsplash">Unsplash</option>
+                                                      <option value="bing">Bing</option>
+                                                    </select>
+                                                </div>
                                                 <div className="relative aspect-video w-full rounded-lg overflow-hidden border border-white/20 shadow-lg">
                                                     <img
                                                         src={localStorage.getItem('bg_url')}
