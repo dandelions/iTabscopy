@@ -334,6 +334,7 @@ function App() {
       if (lastFetch !== today) {
         let photo;
         if (bgSource === 'bing') {
+          photo=fetchBingDailyPhoto();
           setBgUrl(photo.url);
         } else {
           console.log('Fetching Unsplash random photo...');
@@ -356,6 +357,8 @@ function App() {
     setToast({ message: '正在获取新壁纸...', type: 'info' });
     let photo;
     console.log("从source:"+source+"更新壁纸")
+    photo=fetchBingDailyPhoto();
+    if(photo){
     setBgUrl(photo.url);
     /*
       localStorage.setItem('bg_url', photo.url);
