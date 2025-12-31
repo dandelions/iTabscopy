@@ -5,6 +5,8 @@ import WallpaperModal from './WallpaperModal';
 import IconSelector from './IconSelector';
 import ToastContainer, { useToast } from './Toast';
 import syncService from '../services/syncService';
+import { fetchBingDailyPhoto, fetchRandomPhoto, cacheImage } from '../utils/imageService'; // 确保路径正确
+
 
 const Settings = ({
     gridConfig,
@@ -31,10 +33,18 @@ const Settings = ({
     const [userEmail, setUserEmail] = useState(syncService.getEmail());
     const [isSyncing, setIsSyncing] = useState(false);
     const [bgSource, setBgSource] = useState(localStorage.getItem('bg_source') || 'bing'); // 新增: 壁纸来源状态
+    
 
     const handleBgRefresh = async () => {
         setIsLoadingBg(true);
-        const photo = await fetchRandomPhoto();
+        let photo;
+        if (bgSource === 'bing') {
+            // 从 Bing 获取壁纸
+            photo = await fetchBingDailyPhoto(); // 使用你已有的工具函数
+        } else {
+            // 从 Unsplash 获取壁纸
+            photo = await fetchRandomPhoto();
+        }
         if (photo) {
             localStorage.setItem('bg_url', photo.url);
             localStorage.setItem('bg_last_fetch', new Date().toDateString());
