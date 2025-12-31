@@ -361,21 +361,13 @@ function App() {
   const handleChangeWallpaper = useCallback(async (source = 'bing') => {
     setToast({ message: '正在获取新壁纸...', type: 'info' });
     let photo;
-    if (source === 'bing') {
-      photo = await fetchBingDailyPhoto();
-    } else {
-      photo = await fetchRandomPhoto();
-    }
+    photo = await fetchBingDailyPhoto();
     console.log("从source:"+source+"更新壁纸")
       if (photo) {
       setBgUrl(photo.url);
       localStorage.setItem('bg_url', photo.url);
       localStorage.setItem('bg_last_fetch', new Date().toDateString());
-      if(source === 'bing'){
-        cacheBingImage(photo.url); // 预加载图片
-      }else{
-        cacheImage(photo.url); // 预加载图片
-      }
+      cacheBingImage(photo.url); // 预加载图片
       setToast({ message: '壁纸已更新', type: 'success' });
       updateLocalTimestamp(); // 触发云同步
     } else {
