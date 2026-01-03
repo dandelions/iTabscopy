@@ -47,6 +47,9 @@ const SortableFolderItem = ({ shortcut, onRemove, onEdit, isContextOpen, setCont
         isDragging,
     } = useSortable({ id: shortcut.id });
 
+    const [isLongPress, setIsLongPress] = useState(false);
+    const longPressTimeoutRef = useRef(null);
+
     const style = {
         transform: CSS.Transform.toString(transform),
         transition,
@@ -80,12 +83,40 @@ const SortableFolderItem = ({ shortcut, onRemove, onEdit, isContextOpen, setCont
         }
     };
 
-    // 使用长按 Hook
-    const longPressEvents = useLongPress(() => {
-        onEdit(shortcut); // 触发编辑功能
-    }, {
-        delay: 2000 // 设置长按时间为2秒
-    });
+    const handleLongPressStart = () => {
+        longPressTimeoutRef.current = setTimeout(() => {
+            setIsLongPress(true);
+            onEdit(shortcut); // 触发编辑功能
+        }, 2000); // 设置长按时间为2秒
+    };
+
+    const handleLongPressEnd = (e) => {
+        clearTimeout(longPressTimeoutRef.current);
+        if (!isLongPress) {
+            handleOpen(); // 如果没有长按，打开链接
+        }
+        setIsLongPress(false);
+    };
+
+    const handleMouseDown = (e) => {
+        e.stopPropagation();
+        handleLongPressStart();
+    };
+
+    const handleMouseUp = (e) => {
+        e.stopPropagation();
+        handleLongPressEnd(e);
+    };
+
+    const handleTouchStart = (e) => {
+        e.stopPropagation();
+        handleLongPressStart();
+    };
+
+    const handleTouchEnd = (e) => {
+        e.stopPropagation();
+        handleLongPressEnd(e);
+    };
 
     return (
         <div
@@ -93,17 +124,16 @@ const SortableFolderItem = ({ shortcut, onRemove, onEdit, isContextOpen, setCont
             style={style}
             {...attributes}
             {...listeners}
-            {...longPressEvents} // 绑定长按事件
             className="group relative flex flex-col items-center gap-2 p-2 rounded-xl transition-colors cursor-pointer"
             onContextMenu={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 setContextShortcutId(shortcut.id);
             }}
-            onClick={(e) => {
-                e.stopPropagation();
-                handleOpen();
-            }}
+            onMouseDown={handleMouseDown}
+            onMouseUp={handleMouseUp}
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
             onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
