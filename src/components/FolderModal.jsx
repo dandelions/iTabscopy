@@ -11,6 +11,92 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { useIconSource } from '../hooks/useIconSource';
 
+
+/**
+ * 结合了 dnd-kit 拖拽监听器、单击和长按功能的 Hook。
+ * @param {object} options
+ * @param {object} options.dndListeners - 从 dnd-kit 的 useSortable 返回的 listeners 对象。
+ * @param {function} options.onClick - 单击时触发的回调。
+ * @param {function} options.onLongPress - 长按时触发的回调。
+ * @param {number} [options.delay=2000] - 长按的延迟时间（毫秒）。
+ * @returns {object} - 需要应用到组件上的事件处理器。
+ */
+export const useCombinedPress = ({ dndListeners, onClick, onLongPress, delay = 2000 }) => {
+    const timerRef = useRef(null);
+    const isLongPressTriggeredRef = useRef(false);
+    const hasMovedRef = useRef(false);
+
+    const clearTimer = () => {
+        if (timerRef.current) {
+            clearTimeout(timerRef.current);
+            timerRef.current = null;
+        }
+    };
+
+    const handlePointerDown = useCallback((e) => {
+        // 优先调用 dnd-kit 的事件处理器，让它开始监听
+        if (dndListeners && dndListeners.onPointerDown) {
+            dndListeners.onPointerDown(e);
+        }
+        
+        // 重置状态
+        isLongPressTriggeredRef.current = false;
+        hasMovedRef.current = false;
+
+        // 启动长按计时器
+        timerRef.current = setTimeout(() => {
+            // 如果在计时器触发前已经移动，则不执行长按
+            if (hasMovedRef.current) {
+                return;
+            }
+            isLongPressTriggeredRef.current = true;
+            onLongPress(e);
+        }, delay);
+    }, [dndListeners, onLongPress, delay]);
+
+    const handlePointerMove = useCallback(() => {
+        // 一旦检测到移动，就设置移动标志位并清除计时器
+        if (!hasMovedRef.current) {
+            hasMovedRef.current = true;
+            clearTimer();
+        }
+    }, []);
+
+    const handlePointerUp = useCallback((e) => {
+        // 松开时，无论如何都清除计时器
+        clearTimer();
+        
+        // 调用 dnd-kit 的事件处理器
+        if (dndListeners && dndListeners.onPointerUp) {
+            dndListeners.onPointerUp(e);
+        }
+    }, [dndListeners]);
+
+    const handleClick = useCallback((e) => {
+        // 如果长按已经触发，则阻止单击事件
+        if (isLongPressTriggeredRef.current) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+        }
+        // 否则，执行单击回调
+        onClick(e);
+    }, [onClick]);
+
+    return {
+        onPointerDown: handlePointerDown,
+        onPointerMove: handlePointerMove,
+        onPointerUp: handlePointerUp,
+        onClick: handleClick,
+        // 防止在拖动时意外触发右键菜单
+        onContextMenu: (e) => {
+            if (hasMovedRef.current) {
+                e.preventDefault();
+            }
+        }
+    };
+};
+
 // 长按 Hook
 const useLongPress = (callback, { delay = 300 } = {}) => {
     const [isLongPress, setIsLongPress] = useState(false);
@@ -84,11 +170,16 @@ const SortableFolderItem = ({ shortcut, onRemove, onEdit, isContextOpen, setCont
         }
     };
 
-    // 使用长按 Hook
-    const longPressEvents = useLongPress(() => {
+    const handleLongPress = () => {
         onEdit(shortcut); // 触发编辑功能
-    }, {
-        delay: 2000 // 设置长按时间为2秒
+    };
+
+    // 使用新的 Hook 来整合所有事件
+    const combinedEvents = useCombinedPress({
+        dndListeners: listeners, // 传入 dnd-kit 的 listeners
+        onClick: handleOpen,
+        onLongPress: handleLongPress,
+        delay: 2000, // 2秒长按
     });
 
     return (
@@ -96,17 +187,12 @@ const SortableFolderItem = ({ shortcut, onRemove, onEdit, isContextOpen, setCont
             ref={setNodeRef}
             style={style}
             {...attributes}
-            {...listeners}
-            {...longPressEvents} // 绑定长按事件
+            {...combinedEvents} // 关键改动：使用 combinedEvents 替代原来的 listeners 和 longPressEvents
             className="group relative flex flex-col items-center gap-2 p-2 rounded-xl transition-colors cursor-pointer"
             onContextMenu={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 setContextShortcutId(shortcut.id);
-            }}
-            onClick={(e) => {
-                e.stopPropagation();
-                handleOpen();
             }}
             onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
