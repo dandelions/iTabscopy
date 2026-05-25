@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write # 显式声明允许此工作流写入/修改 Release 附件
+  contents: write # 确保工作流有权限创建 Release 并上传附件
 
 jobs:
   build:
@@ -31,7 +31,7 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build extension        
+      - name: Build extension
         run: npm run build
 
       - name: Create version info
@@ -43,7 +43,6 @@ jobs:
       - name: Create ZIP package
         run: |
           cd dist
-          # 核心修复：将编译出的 dist 内容压缩到根目录，确保名字完全统一
           zip -r ../dandelions-itab-extension.zip .
           cd ..
 
@@ -51,14 +50,16 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: chrome-extension-build
-          path: dandelions-itab-extension.zip # 修复：只传这一个具体的 zip 文件，去掉 dist/
+          path: dandelions-itab-extension.zip # 严格只上传单个 zip 文件
           retention-days: 30
 
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2 # 升级至最新稳定版 v2
+        uses: softprops/action-gh-release@v2
         with:
-          files: dandelions-itab-extension.zip # 修复：精确匹配上面生成的压缩包
+          files: dandelions-itab-extension.zip
+          name: Release ${{ github.ref_name }}  # 自动将 Tag 名字（如 v1.5.0）应用到 Release 标题
+          tag_name: ${{ github.ref }}          # 明确绑定当前推送的 Tag 
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
