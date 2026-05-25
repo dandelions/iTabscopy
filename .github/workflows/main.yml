@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: write # 确保工作流有权限将打包好的 ZIP 写入到 Release 附件中
 
 jobs:
   build:
@@ -18,7 +18,7 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4 # 升级到最新的 v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -27,6 +27,7 @@ jobs:
 
       - name: List files
         run: ls -la
+
       - name: Install dependencies
         run: npm install
 
@@ -42,23 +43,22 @@ jobs:
       - name: Create ZIP package
         run: |
           cd dist
-          zip -r ../aesthetic-newtab-extension.zip .
+          # 核心修复：确保这里生成的压缩包名字和后面引用的一模一样
+          zip -r ../dandelions-itab-extension.zip .
           cd ..
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: chrome-extension-build
-          path: |
-            dist/
-            dandelions-itab-extension.zip
+          path: dandelions-itab-extension.zip # 保持文件名统一
           retention-days: 30
 
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2 # 升级到更稳定的 v2 版本
         with:
-          files: dandelions-itab-extension.zip
+          files: dandelions-itab-extension.zip # 保持文件名统一
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
