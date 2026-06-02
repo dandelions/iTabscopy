@@ -140,7 +140,7 @@ const OutsideDroppable = ({ children, onClose, isVisible }) => {
 };
 
 // --- 主组件 ---
-const FolderModal = ({ isOpen, onClose, folder, onUpdate, onDeleteItem, onEditShortcut }) => {
+const FolderModal = ({ isOpen, onClose, folder, onUpdate, onDelete, onEditShortcut }) => {
     const [contextShortcutId, setContextShortcutId] = useState(null);
     const gridRef = useRef(null);
     const folderDragStartPosRef = useRef({ x: 0, y: 0 });
@@ -255,7 +255,7 @@ const FolderModal = ({ isOpen, onClose, folder, onUpdate, onDeleteItem, onEditSh
                                         shortcut={shortcut}
                                         isContextOpen={isOpen && contextShortcutId === shortcut.id}
                                         setContextShortcutId={setContextShortcutId}
-                                        onRemove={onDeleteItem}
+                                        onRemove={onDelete}
                                         onEdit={onEditShortcut}
                                         isDraggable={true}
                                     />

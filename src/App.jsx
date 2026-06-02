@@ -3,10 +3,11 @@ import Layout from './components/Layout';
 import SearchBar from './components/SearchBar';
 import Settings from './components/Settings';
 import ShortcutGrid from './components/ShortcutGrid';
+import TodoPanel from './components/TodoPanel';
 import NotesPanel from './components/NotesPanel';
 import DataManagement from './components/DataManagement';
 import { Toast } from './components/Toast';
-import { Settings as SettingsIcon, Cloud, StickyNote, Plus, Database, Menu } from 'lucide-react';
+import { Settings as SettingsIcon, Cloud, ClipboardList, StickyNote, Plus, Database, Menu } from 'lucide-react';
 
 // 触摸测试工具（开发环境使用）
 if (import.meta.env.DEV) {
@@ -79,6 +80,9 @@ function App() {
     const saved = localStorage.getItem('todos');
     return saved ? JSON.parse(saved) : [];
   });
+  const [isTodoOpen, setIsTodoOpen] = useState(false);
+  const [isTodoPinned, setIsTodoPinned] = useState(() => localStorage.getItem('todo_pinned') === 'true');
+  const isTodoVisible = isTodoOpen || isTodoPinned;
   const [notes, setNotes] = useState(() => {
     const saved = localStorage.getItem('notes');
     return saved ? JSON.parse(saved) : [];
@@ -330,6 +334,14 @@ function App() {
   useEffect(() => { localStorage.setItem('todos', JSON.stringify(todos)); }, [todos]);
 
   useEffect(() => {
+    localStorage.setItem('todo_pinned', isTodoPinned ? 'true' : 'false');
+    if (isTodoPinned) {
+      const timer = setTimeout(() => setIsTodoOpen(true), 0);
+      return () => clearTimeout(timer);
+    }
+  }, [isTodoPinned]);
+
+  useEffect(() => {
     localStorage.setItem('notes', JSON.stringify(notes));
     const timer = setTimeout(() => {
       if (notes.length > 0 && !activeNoteId) {
@@ -359,6 +371,14 @@ function App() {
   const handleDeleteTodo = (id) => {
     setTodos(prev => prev.filter(todo => todo.id !== id));
     updateLocalTimestamp();
+  };
+
+  const handleTodoDockClick = () => {
+    if (isTodoPinned) {
+      setToast({ message: 'Please unpin first', type: 'error' });
+      return;
+    }
+    setIsTodoOpen(prev => !prev);
   };
 
   const handleAddNote = () => {
@@ -460,6 +480,7 @@ function App() {
                 <div className="opacity-100 pointer-events-auto scale-100">
                   <button onClick={() => setSettingsTrigger({ tab: 'shortcuts', at: Date.now() })} className="w-12 h-12 rounded-xl liquid-glass-mini hover:scale-110 hover:border-white/40 text-white flex items-center justify-center transition-all active:scale-95" title="添加"><Plus className="h-5 w-5" /></button>
                   <button onClick={() => setIsNotesOpen(prev => !prev)} className="w-12 h-12 rounded-xl liquid-glass-mini hover:scale-110 hover:border-white/40 text-white flex items-center justify-center transition-all active:scale-95" title="笔记"><StickyNote className="h-5 w-5" /></button>
+                  <button onClick={handleTodoDockClick} className="w-12 h-12 rounded-xl liquid-glass-mini hover:scale-110 hover:border-white/40 text-white flex items-center justify-center transition-all active:scale-95" title="待办列表"><ClipboardList className="h-5 w-5" /></button>
                   <button onClick={() => setSettingsTrigger({ tab: 'general', at: Date.now() })} className="w-12 h-12 rounded-xl liquid-glass-mini hover:scale-110 hover:border-white/40 text-white flex items-center justify-center transition-all active:scale-95" title="通用"><SettingsIcon className="h-5 w-5" /></button>
                   <button onClick={() => setSettingsTrigger({ tab: 'sync', at: Date.now() })} className="w-12 h-12 rounded-xl liquid-glass-mini hover:scale-110 hover:border-white/40 flex items-center justify-center transition-all active:scale-95" title="同步">
                     <Cloud className={`h-5 w-5 transition-colors ${!isLoggedIn ? 'text-white' : !isOnline ? 'text-red-400' : 'text-green-400'}`} />
@@ -471,33 +492,20 @@ function App() {
           </div>
         </div>
 
-        <NotesPanel
-          notes={notes}
-          activeNoteId={activeNoteId}
-          onSelectNote={handleSelectNote}
-          onAddNote={handleAddNote}
-          onDeleteNote={handleDeleteNote}
-          onUpdateNote={handleUpdateNote}
-          onImportNotes={handleImportNotes}
-          todos={todos}
-          onAddTodo={handleAddTodo}
-          onToggleTodo={handleToggleTodo}
-          onDeleteTodo={handleDeleteTodo}
-          isOpen={isNotesOpen}
-          onOpenChange={setIsNotesOpen}
-        />
+        <TodoPanel todos={todos} onAdd={handleAddTodo} onToggle={handleToggleTodo} onDelete={handleDeleteTodo} isOpen={isTodoVisible} pinned={isTodoPinned} onPinToggle={() => setIsTodoPinned(prev => !prev)} onOpenChange={setIsTodoOpen} />
+        <NotesPanel notes={notes} activeNoteId={activeNoteId} onSelectNote={handleSelectNote} onAddNote={handleAddNote} onDeleteNote={handleDeleteNote} onUpdateNote={handleUpdateNote} onImportNotes={handleImportNotes} isOpen={isNotesOpen} onOpenChange={setIsNotesOpen} />
         <DataManagement isOpen={isDataManagementOpen} onClose={() => setIsDataManagementOpen(false)} onExport={handleExportData} onImport={handleImportData} />
 
-        <div className="w-full flex flex-col items-center mt-2">
+        <div className="w-full flex flex-col items-center mt-2" style={{ marginLeft: isTodoVisible ? 160 : 0, transition: 'margin 300ms ease' }} >
           {gridConfig.showSearchBar && (
               <div className="w-full flex justify-center">
-                <div style={{ width: 'clamp(260px, 75vw, 720px)', maxWidth: '75vw', transition: 'max-width 300ms ease, width 300ms ease' }} >
+                <div style={{ width: 'clamp(260px, 75vw, 720px)', maxWidth: isTodoVisible ? (gridConfig.centerSearchBar ? 'calc(100vw - 640px)' : 'calc(100% - 320px)') : '75vw', transform: (gridConfig.centerSearchBar && isTodoVisible) ? 'translateX(-80px)' : 'none', transition: 'transform 300ms ease, max-width 300ms ease, width 300ms ease' }} >
                   <SearchBar />
                 </div>
               </div>
           )}
 
-          <ShortcutGrid config={gridConfig} shortcuts={shortcuts} onRemoveShortcut={handleRemoveShortcut} onEditShortcut={handleEditShortcut} onReorder={handleReorderShortcuts} leftOffset={0} />
+          <ShortcutGrid config={gridConfig} shortcuts={shortcuts} onRemoveShortcut={handleRemoveShortcut} onEditShortcut={handleEditShortcut} onReorder={handleReorderShortcuts} leftOffset={isTodoVisible ? 320 : 0} />
         </div>
         {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       </Layout>
