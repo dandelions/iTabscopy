@@ -576,12 +576,20 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
         }
     };
 
-    const handleFolderDelete = () => {
-        if (openFolder && onRemoveShortcut) {
-            onRemoveShortcut(openFolder.id);
-            setOpenFolder(null);
-            setIsFolderModalOpen(false);
-        }
+    const handleFolderItemDelete = (itemId) => {
+        if (!openFolder) return;
+
+        const updatedFolder = {
+            ...openFolder,
+            children: (openFolder.children || []).filter(item => item.id !== itemId)
+        };
+
+        const newShortcuts = shortcuts.map(shortcut =>
+            shortcut.id === openFolder.id ? updatedFolder : shortcut
+        );
+
+        if (onReorder) onReorder(newShortcuts);
+        setOpenFolder(updatedFolder);
     };
 
     const handleFolderItemMoveOut = (itemId, position) => {
@@ -905,7 +913,7 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
                 onClose={() => setIsFolderModalOpen(false)}
                 folder={openFolder}
                 onUpdate={handleFolderUpdate}
-                onDelete={handleFolderDelete}
+                onDeleteItem={handleFolderItemDelete}
                 onMoveOut={handleFolderItemMoveOut}
                 onEditShortcut={setEditingShortcut}
             />
