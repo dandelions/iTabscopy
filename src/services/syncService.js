@@ -24,6 +24,166 @@ class SyncService {
         }
     }
 
+    getWebDavConfig() {
+        const saved = localStorage.getItem('webdav_config');
+        if (!saved) {
+            return {
+                url: '',
+                username: '',
+                password: '',
+                fileName: 'itabs-backup.json',
+                autoSync: false,
+            };
+        }
+
+        try {
+            return {
+                url: '',
+                username: '',
+                password: '',
+                fileName: 'itabs-backup.json',
+                autoSync: false,
+                ...JSON.parse(saved),
+            };
+        } catch {
+            localStorage.removeItem('webdav_config');
+            return {
+                url: '',
+                username: '',
+                password: '',
+                fileName: 'itabs-backup.json',
+                autoSync: false,
+            };
+        }
+    }
+
+    setWebDavConfig(config) {
+        const nextConfig = {
+            url: (config.url || '').trim(),
+            username: (config.username || '').trim(),
+            password: config.password || '',
+            fileName: (config.fileName || 'itabs-backup.json').trim(),
+            autoSync: !!config.autoSync,
+        };
+
+        if (!nextConfig.url && !nextConfig.username && !nextConfig.password) {
+            localStorage.removeItem('webdav_config');
+        } else {
+            localStorage.setItem('webdav_config', JSON.stringify(nextConfig));
+        }
+
+        return nextConfig;
+    }
+
+    isWebDavConfigured() {
+        const config = this.getWebDavConfig();
+        return !!config.url;
+    }
+
+    shouldAutoSyncWebDav() {
+        const config = this.getWebDavConfig();
+        return !!config.url && !!config.autoSync;
+    }
+
+    createBackupData(data) {
+        return {
+            version: '1.0',
+            exportDate: new Date().toISOString(),
+            updatedAt: Date.now(),
+            todos: data.todos || [],
+            notes: data.notes || [],
+            shortcuts: data.shortcuts || [],
+            gridConfig: data.gridConfig || {},
+            bgConfig: data.bgConfig || {},
+            bgUrl: data.bgUrl || '',
+        };
+    }
+
+    requireWebDavConfig() {
+        const config = this.getWebDavConfig();
+        if (!config.url) {
+            throw new Error('请先配置 WebDAV 地址');
+        }
+        return config;
+    }
+
+    getWebDavTargetUrl(config, overrideFileName) {
+        const fileName = (overrideFileName || config.fileName || 'itabs-backup.json').trim();
+        if (!fileName || fileName.includes('/')) {
+            throw new Error('WebDAV 备份文件名不能包含路径分隔符');
+        }
+
+        const baseUrl = config.url.trim();
+        const separator = baseUrl.endsWith('/') ? '' : '/';
+        return `${baseUrl}${separator}${encodeURIComponent(fileName)}`;
+    }
+
+    getWebDavHeaders(config, contentType = 'application/json') {
+        const headers = {
+            'Content-Type': contentType,
+        };
+
+        if (config.username || config.password) {
+            const credentials = `${config.username || ''}:${config.password || ''}`;
+            headers.Authorization = `Basic ${btoa(unescape(encodeURIComponent(credentials)))}`;
+        }
+
+        return headers;
+    }
+
+    async testWebDavConnection() {
+        const config = this.requireWebDavConfig();
+        if (!this.isOnline()) {
+            throw new Error('当前离线，无法连接 WebDAV');
+        }
+
+        const testFileName = `.itabs-webdav-test-${Date.now()}.txt`;
+        const targetUrl = this.getWebDavTargetUrl(config, testFileName);
+        const response = await fetch(targetUrl, {
+            method: 'PUT',
+            headers: this.getWebDavHeaders(config, 'text/plain'),
+            body: 'iTabs WebDAV test',
+        });
+
+        if (!response.ok) {
+            throw new Error(`WebDAV 测试失败：HTTP ${response.status}`);
+        }
+
+        try {
+            await fetch(targetUrl, {
+                method: 'DELETE',
+                headers: this.getWebDavHeaders(config, 'text/plain'),
+            });
+        } catch (error) {
+            console.warn('Failed to remove WebDAV test file:', error);
+        }
+
+        return { success: true };
+    }
+
+    async uploadBackupToWebDav(data) {
+        const config = this.requireWebDavConfig();
+        if (!this.isOnline()) {
+            throw new Error('当前离线，无法同步到 WebDAV');
+        }
+
+        const backupData = data?.version ? data : this.createBackupData(data || {});
+        const targetUrl = this.getWebDavTargetUrl(config);
+        const response = await fetch(targetUrl, {
+            method: 'PUT',
+            headers: this.getWebDavHeaders(config),
+            body: JSON.stringify(backupData, null, 2),
+        });
+
+        if (!response.ok) {
+            throw new Error(`WebDAV 同步失败：HTTP ${response.status}`);
+        }
+
+        const syncedAt = Date.now();
+        localStorage.setItem('last_webdav_sync', String(syncedAt));
+        return { success: true, syncedAt, fileName: config.fileName };
+    }
+
     // Ensure worker URL exists before network calls
     requireWorkerUrl() {
         const url = this.getWorkerUrl();
@@ -164,7 +324,7 @@ class SyncService {
                 'Authorization': `Bearer ${this.token}`,
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(data),
+            body: JSON.stringify(syncData),
         });
 
         if (!response.ok) {

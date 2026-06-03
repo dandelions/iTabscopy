@@ -22,6 +22,8 @@
     ],
     "host_permissions": [
         "https://api.unsplash.com/*",
-        "https://*.workers.dev/*"
+        "https://*.workers.dev/*",
+        "http://*/*",
+        "https://*/*"
     ]
 }

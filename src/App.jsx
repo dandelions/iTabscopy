@@ -96,6 +96,15 @@ function App() {
     localStorage.setItem('last_local_update', String(Date.now()));
   };
 
+  const createBackupData = useCallback(() => syncService.createBackupData({
+    todos,
+    notes,
+    shortcuts,
+    gridConfig,
+    bgConfig,
+    bgUrl
+  }), [todos, notes, shortcuts, gridConfig, bgConfig, bgUrl]);
+
   useEffect(() => {
     const raw = localStorage.getItem('last_local_update');
     if (raw !== null) {
@@ -327,6 +336,19 @@ function App() {
     return () => clearTimeout(timeoutId);
   }, [shortcuts, gridConfig, bgConfig, bgUrl, todos, notes]);
 
+  useEffect(() => {
+    if (!syncService.shouldAutoSyncWebDav() || isPullingRef.current) return;
+    const syncData = async () => {
+      try {
+        await syncService.uploadBackupToWebDav(createBackupData());
+      } catch (error) {
+        console.error('WebDAV auto-sync failed:', error);
+      }
+    };
+    const timeoutId = setTimeout(syncData, 3000);
+    return () => clearTimeout(timeoutId);
+  }, [createBackupData]);
+
   useEffect(() => { localStorage.setItem('todos', JSON.stringify(todos)); }, [todos]);
 
   useEffect(() => {
@@ -406,7 +428,7 @@ function App() {
   };
 
   const handleExportData = () => {
-    const data = { version: '1.0', exportDate: new Date().toISOString(), todos, notes, shortcuts, gridConfig, bgConfig, bgUrl };
+    const data = createBackupData();
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -416,6 +438,12 @@ function App() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const handleSyncBackupToWebDav = async () => {
+    const result = await syncService.uploadBackupToWebDav(createBackupData());
+    setToast({ message: `备份已同步到 WebDAV：${result.fileName}`, type: 'success' });
+    return result;
   };
 
   const handleImportData = (data) => {
@@ -448,6 +476,9 @@ function App() {
             onBgUpdate={setBgUrl}
             onAddShortcut={handleAddShortcut}
             shortcuts={shortcuts}
+            todos={todos}
+            notes={notes}
+            bgUrl={bgUrl}
             onEditShortcut={handleEditShortcut}
             onRemoveShortcut={handleRemoveShortcut}
             onSyncPull={pullFromCloud}
@@ -486,7 +517,13 @@ function App() {
           isOpen={isNotesOpen}
           onOpenChange={setIsNotesOpen}
         />
-        <DataManagement isOpen={isDataManagementOpen} onClose={() => setIsDataManagementOpen(false)} onExport={handleExportData} onImport={handleImportData} />
+        <DataManagement
+          isOpen={isDataManagementOpen}
+          onClose={() => setIsDataManagementOpen(false)}
+          onExport={handleExportData}
+          onImport={handleImportData}
+          onSyncToWebDav={handleSyncBackupToWebDav}
+        />
 
         <div className="w-full flex flex-col items-center mt-2">
           {gridConfig.showSearchBar && (
