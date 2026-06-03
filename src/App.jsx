@@ -351,19 +351,6 @@ function App() {
     return () => clearTimeout(timeoutId);
   }, [shortcuts, gridConfig, bgConfig, bgUrl, todos, notes, isPristineDefaultData]);
 
-  useEffect(() => {
-    if (!syncService.shouldAutoSyncWebDav() || isPullingRef.current) return;
-    const syncData = async () => {
-      try {
-        await syncService.uploadBackupToWebDav(createBackupData());
-      } catch (error) {
-        console.error('WebDAV auto-sync failed:', error);
-      }
-    };
-    const timeoutId = setTimeout(syncData, 3000);
-    return () => clearTimeout(timeoutId);
-  }, [createBackupData]);
-
   useEffect(() => { localStorage.setItem('todos', JSON.stringify(todos)); }, [todos]);
 
   useEffect(() => {
@@ -455,12 +442,6 @@ function App() {
     URL.revokeObjectURL(url);
   };
 
-  const handleSyncBackupToWebDav = async () => {
-    const result = await syncService.uploadBackupToWebDav(createBackupData());
-    setToast({ message: `备份已同步到 WebDAV：${result.fileName}`, type: 'success' });
-    return result;
-  };
-
   const handleImportData = (data) => {
     if (!data || typeof data !== 'object') throw new Error('无效的数据格式');
     const hasValidData =
@@ -538,7 +519,6 @@ function App() {
           onClose={() => setIsDataManagementOpen(false)}
           onExport={handleExportData}
           onImport={handleImportData}
-          onSyncToWebDav={handleSyncBackupToWebDav}
         />
 
         <div className="w-full flex flex-col items-center mt-2">

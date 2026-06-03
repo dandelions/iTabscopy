@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Cloud, RefreshCw, Globe, LogOut, Github, Combine, Save, Upload, Info, Tag, Clock } from 'lucide-react';
+import { X, Cloud, RefreshCw, Globe, LogOut, Github, Combine, Info, Tag, Clock } from 'lucide-react';
 import { fetchRandomPhoto, cacheImage } from '../utils/unsplash';
 import WallpaperModal from './WallpaperModal';
 import IconSelector from './IconSelector';
@@ -377,15 +377,6 @@ const Settings = ({
                                         lastSync={syncService.getLastSync()}
                                     />
                                 )}
-                                <WebDavPanel
-                                    shortcuts={shortcuts}
-                                    todos={todos}
-                                    notes={notes}
-                                    gridConfig={gridConfig}
-                                    bgConfig={bgConfig}
-                                    bgUrl={bgUrl}
-                                    showToast={showToast}
-                                />
                             </div>
                         )}
 
@@ -1025,166 +1016,6 @@ const SyncPanel = ({ email, isSyncing, onSync, onLogout, lastSync }) => {
                     </p>
                 </div>
 
-            </div>
-        </div>
-    );
-};
-
-const WebDavPanel = ({ shortcuts, todos, notes, gridConfig, bgConfig, bgUrl, showToast }) => {
-    const [config, setConfig] = useState(syncService.getWebDavConfig());
-    const [isSaving, setIsSaving] = useState(false);
-    const [isTesting, setIsTesting] = useState(false);
-    const [isUploading, setIsUploading] = useState(false);
-
-    const updateConfig = (patch) => {
-        setConfig(prev => ({ ...prev, ...patch }));
-    };
-
-    const handleSave = () => {
-        setIsSaving(true);
-        try {
-            const saved = syncService.setWebDavConfig(config);
-            setConfig(saved);
-            showToast('WebDAV 配置已保存', 'success');
-        } catch (error) {
-            showToast(error.message, 'error');
-        } finally {
-            setIsSaving(false);
-        }
-    };
-
-    const handleTest = async () => {
-        setIsTesting(true);
-        try {
-            syncService.setWebDavConfig(config);
-            await syncService.testWebDavConnection();
-            showToast('WebDAV 连接测试成功', 'success');
-        } catch (error) {
-            showToast(error.message, 'error');
-        } finally {
-            setIsTesting(false);
-        }
-    };
-
-    const handleUpload = async () => {
-        setIsUploading(true);
-        try {
-            syncService.setWebDavConfig(config);
-            const data = syncService.createBackupData({
-                shortcuts,
-                todos,
-                notes,
-                gridConfig,
-                bgConfig,
-                bgUrl: bgUrl || localStorage.getItem('bg_url') || '',
-            });
-            const result = await syncService.uploadBackupToWebDav(data);
-            showToast(`备份已同步到 WebDAV：${result.fileName}`, 'success');
-        } catch (error) {
-            showToast(error.message, 'error');
-        } finally {
-            setIsUploading(false);
-        }
-    };
-
-    const lastSyncRaw = localStorage.getItem('last_webdav_sync');
-    const lastSync = lastSyncRaw && Number.isFinite(Number(lastSyncRaw))
-        ? new Date(Number(lastSyncRaw)).toLocaleString()
-        : '从未';
-
-    return (
-        <div className="pt-6 border-t border-white/10">
-            <h3 className="text-sm font-medium text-white mb-4">WebDAV 备份</h3>
-
-            <div className="space-y-4">
-                <div className="space-y-2">
-                    <label className="text-xs text-white/60">WebDAV 目录地址</label>
-                    <input
-                        type="url"
-                        value={config.url}
-                        onChange={(e) => updateConfig({ url: e.target.value })}
-                        placeholder="https://example.com/dav/itabs"
-                        className="w-full bg-black/10 border border-white/10 rounded-lg py-2.5 px-4 text-white text-xs focus:outline-none focus:border-white/30 transition-colors placeholder-white/30 font-mono"
-                    />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                        <label className="text-xs text-white/60">用户名</label>
-                        <input
-                            type="text"
-                            value={config.username}
-                            onChange={(e) => updateConfig({ username: e.target.value })}
-                            className="w-full bg-black/10 border border-white/10 rounded-lg py-2.5 px-4 text-white text-sm focus:outline-none focus:border-white/30 transition-colors placeholder-white/30"
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <label className="text-xs text-white/60">密码</label>
-                        <input
-                            type="password"
-                            value={config.password}
-                            onChange={(e) => updateConfig({ password: e.target.value })}
-                            className="w-full bg-black/10 border border-white/10 rounded-lg py-2.5 px-4 text-white text-sm focus:outline-none focus:border-white/30 transition-colors placeholder-white/30"
-                        />
-                    </div>
-                </div>
-
-                <div className="space-y-2">
-                    <label className="text-xs text-white/60">备份文件名</label>
-                    <input
-                        type="text"
-                        value={config.fileName}
-                        onChange={(e) => updateConfig({ fileName: e.target.value })}
-                        placeholder="itabs-backup.json"
-                        className="w-full bg-black/10 border border-white/10 rounded-lg py-2.5 px-4 text-white text-sm focus:outline-none focus:border-white/30 transition-colors placeholder-white/30"
-                    />
-                </div>
-
-                <div className="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/10">
-                    <div>
-                        <div className="text-sm text-white">自动备份</div>
-                        <div className="text-xs text-white/50 mt-1">本地数据变化后自动上传备份 JSON</div>
-                    </div>
-                    <button
-                        type="button"
-                        onClick={() => updateConfig({ autoSync: !config.autoSync })}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${config.autoSync ? 'bg-blue-600' : 'bg-white/20'}`}
-                    >
-                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${config.autoSync ? 'translate-x-6' : 'translate-x-1'}`} />
-                    </button>
-                </div>
-
-                <div className="p-4 bg-white/5 rounded-lg border border-white/10">
-                    <div className="text-xs text-white/60 mb-1">上次 WebDAV 备份</div>
-                    <div className="text-sm text-white">{lastSync}</div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2">
-                    <button
-                        onClick={handleSave}
-                        disabled={isSaving}
-                        className="py-2.5 bg-white/10 hover:bg-white/20 text-sm font-medium text-white rounded-lg transition-colors shadow-lg disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                        <Save className="h-4 w-4" />
-                        <span>保存</span>
-                    </button>
-                    <button
-                        onClick={handleTest}
-                        disabled={isTesting || !config.url}
-                        className="py-2.5 bg-white/10 hover:bg-white/20 text-sm font-medium text-white rounded-lg transition-colors shadow-lg disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                        {isTesting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Cloud className="h-4 w-4" />}
-                        <span>测试</span>
-                    </button>
-                    <button
-                        onClick={handleUpload}
-                        disabled={isUploading || !config.url}
-                        className="py-2.5 bg-blue-600 hover:bg-blue-500 text-sm font-medium text-white rounded-lg transition-colors shadow-lg disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                        {isUploading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                        <span>上传</span>
-                    </button>
-                </div>
             </div>
         </div>
     );

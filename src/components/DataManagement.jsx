@@ -1,10 +1,9 @@
 import { useState } from 'react';
-import { X, Download, Upload, Check, AlertCircle, Cloud } from 'lucide-react';
+import { X, Download, Upload, Check, AlertCircle } from 'lucide-react';
 
-const DataManagement = ({ isOpen, onClose, onExport, onImport, onSyncToWebDav }) => {
+const DataManagement = ({ isOpen, onClose, onExport, onImport }) => {
     const [importFile, setImportFile] = useState(null);
     const [message, setMessage] = useState({ type: '', text: '' });
-    const [isSyncingWebDav, setIsSyncingWebDav] = useState(false);
 
     const handleExport = () => {
         try {
@@ -13,21 +12,6 @@ const DataManagement = ({ isOpen, onClose, onExport, onImport, onSyncToWebDav })
             setTimeout(() => setMessage({ type: '', text: '' }), 3000);
         } catch (error) {
             setMessage({ type: 'error', text: '导出失败：' + error.message });
-        }
-    };
-
-    const handleWebDavSync = async () => {
-        if (!onSyncToWebDav) return;
-
-        setIsSyncingWebDav(true);
-        try {
-            await onSyncToWebDav();
-            setMessage({ type: 'success', text: '备份已同步到 WebDAV！' });
-            setTimeout(() => setMessage({ type: '', text: '' }), 3000);
-        } catch (error) {
-            setMessage({ type: 'error', text: 'WebDAV 同步失败：' + error.message });
-        } finally {
-            setIsSyncingWebDav(false);
         }
     };
 
@@ -108,14 +92,6 @@ const DataManagement = ({ isOpen, onClose, onExport, onImport, onSyncToWebDav })
                         >
                             <Download className="h-5 w-5" />
                             <span>导出数据</span>
-                        </button>
-                        <button
-                            onClick={handleWebDavSync}
-                            disabled={isSyncingWebDav}
-                            className="w-full px-4 py-3 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 hover:border-sky-400/50 text-white hover:text-sky-400 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                        >
-                            <Cloud className="h-5 w-5" />
-                            <span>{isSyncingWebDav ? '同步中...' : '导出并同步到 WebDAV'}</span>
                         </button>
                     </div>
 
