@@ -176,11 +176,19 @@ async function handleWebDavRequest(request, env, corsHeaders) {
         headers.Authorization = `Basic ${btoa(unescape(encodeURIComponent(`${username || ''}:${password || ''}`)))}`;
     }
 
-    const response = await fetch(targetUrl.toString(), {
-        method: normalizedMethod,
-        headers,
-        body: normalizedMethod === 'DELETE' ? undefined : body,
-    });
+    let response;
+    try {
+        response = await fetch(targetUrl.toString(), {
+            method: normalizedMethod,
+            headers,
+            body: normalizedMethod === 'DELETE' ? undefined : body,
+        });
+    } catch (error) {
+        return jsonResponse({
+            error: `WebDAV 代理无法访问目标地址：${error.message}`,
+            status: 502,
+        }, 502, corsHeaders);
+    }
 
     if (response.ok) {
         return jsonResponse({ success: true, status: response.status }, 200, corsHeaders);

@@ -22,6 +22,7 @@ import { removeIconFromCache } from './utils/icons';
 import syncService from './services/syncService';
 
 const DEFAULT_BG_URL = 'https://images.unsplash.com/photo-1472214103451-9374bd1c798e?q=80&w=2070&auto=format&fit=crop';
+const SYNC_AUTO_PUSH_BLOCKED_KEY = 'sync_auto_push_blocked';
 
 function App() {
   // 动态更新视口高度
@@ -92,6 +93,17 @@ function App() {
 
   const isPullingRef = useRef(false);
 
+  const isPristineDefaultData = useCallback(() => {
+    const hasLocalUpdate = localStorage.getItem('last_local_update') !== null;
+    return !hasLocalUpdate &&
+        shortcuts.length === 1 &&
+        shortcuts[0]?.id === 1 &&
+        shortcuts[0]?.title === 'Google' &&
+        shortcuts[0]?.url === 'https://google.com' &&
+        todos.length === 0 &&
+        notes.length === 0;
+  }, [shortcuts, todos, notes]);
+
   const updateLocalTimestamp = () => {
     localStorage.setItem('last_local_update', String(Date.now()));
   };
@@ -120,26 +132,26 @@ function App() {
     }
   }, []);
 
-  const pullFromCloud = useCallback(async () => {
-    if (!syncService.isLoggedIn()) return;
+  const pullFromCloud = useCallback(async (options = {}) => {
+    const { forceApply = false, throwOnError = false } = options;
+    if (!syncService.isLoggedIn()) return false;
 
     try {
       isPullingRef.current = true;
       const cloudData = await syncService.pullData();
       if (!cloudData) {
         isPullingRef.current = false;
-        return;
+        return false;
       }
 
       const lastRaw = localStorage.getItem('last_local_update');
       const lastLocalUpdate = lastRaw !== null && Number.isFinite(Number(lastRaw)) ? Number(lastRaw) : null;
       const cloudUpdatedAt = Number.isFinite(Number(cloudData.updatedAt)) ? Number(cloudData.updatedAt) : null;
 
-      const shouldApplyCloud = cloudUpdatedAt ? (!lastLocalUpdate || cloudUpdatedAt > lastLocalUpdate) : !lastLocalUpdate;
+      const shouldApplyCloud = forceApply || (cloudUpdatedAt ? (!lastLocalUpdate || cloudUpdatedAt > lastLocalUpdate) : !lastLocalUpdate);
+      let updated = false;
 
       if (shouldApplyCloud) {
-        let updated = false;
-
         if (cloudData.shortcuts) {
           setShortcuts(cloudData.shortcuts);
           localStorage.setItem('shortcuts', JSON.stringify(cloudData.shortcuts));
@@ -173,16 +185,17 @@ function App() {
         }
 
         if (updated) {
-          if (cloudUpdatedAt) {
-            localStorage.setItem('last_local_update', String(cloudUpdatedAt));
-          }
+          localStorage.setItem('last_local_update', String(cloudUpdatedAt || Date.now()));
         }
       }
 
       setTimeout(() => { isPullingRef.current = false; }, 100);
+      return updated;
     } catch (error) {
       console.error('Failed to pull from cloud:', error);
       isPullingRef.current = false;
+      if (throwOnError) throw error;
+      return false;
     }
   }, []);
 
@@ -320,6 +333,8 @@ function App() {
 
   useEffect(() => {
     if (!syncService.isLoggedIn() || isPullingRef.current) return;
+    if (localStorage.getItem(SYNC_AUTO_PUSH_BLOCKED_KEY) === '1') return;
+    if (isPristineDefaultData()) return;
     const syncData = async () => {
       try {
         const data = { shortcuts, gridConfig, bgConfig, bgUrl, todos, notes };
@@ -334,7 +349,7 @@ function App() {
     };
     const timeoutId = setTimeout(syncData, 2000);
     return () => clearTimeout(timeoutId);
-  }, [shortcuts, gridConfig, bgConfig, bgUrl, todos, notes]);
+  }, [shortcuts, gridConfig, bgConfig, bgUrl, todos, notes, isPristineDefaultData]);
 
   useEffect(() => {
     if (!syncService.shouldAutoSyncWebDav() || isPullingRef.current) return;

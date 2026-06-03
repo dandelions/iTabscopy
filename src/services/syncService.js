@@ -134,9 +134,27 @@ class SyncService {
     shouldProxyWebDav(config) {
         try {
             const targetUrl = new URL(config.url);
-            return targetUrl.protocol === 'http:' && !!this.getWorkerUrl();
+            return targetUrl.protocol === 'http:' && window.location.protocol === 'https:' && !!this.getWorkerUrl();
         } catch {
             return false;
+        }
+    }
+
+    async getWebDavErrorMessage(response, fallback) {
+        let text = '';
+        try {
+            text = await response.text();
+        } catch {
+            return fallback;
+        }
+
+        if (!text) return fallback;
+
+        try {
+            const data = JSON.parse(text);
+            return data.error || fallback;
+        } catch {
+            return text.length > 160 ? `${text.slice(0, 160)}...` : text;
         }
     }
 
@@ -190,7 +208,8 @@ class SyncService {
         });
 
         if (!response.ok) {
-            throw new Error(`WebDAV 测试失败：HTTP ${response.status}`);
+            const message = await this.getWebDavErrorMessage(response, `WebDAV 测试失败：HTTP ${response.status}`);
+            throw new Error(message);
         }
 
         try {
@@ -220,7 +239,8 @@ class SyncService {
         });
 
         if (!response.ok) {
-            throw new Error(`WebDAV 同步失败：HTTP ${response.status}`);
+            const message = await this.getWebDavErrorMessage(response, `WebDAV 同步失败：HTTP ${response.status}`);
+            throw new Error(message);
         }
 
         const syncedAt = Date.now();

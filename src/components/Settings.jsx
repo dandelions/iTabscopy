@@ -9,6 +9,7 @@ import { fetchBingDailyPhoto, cacheImage as cacheBingImage } from '../utils/imag
 
 const APP_VERSION = import.meta.env.VITE_APP_VERSION || 'unknown';
 const BUILD_TIME = import.meta.env.VITE_BUILD_TIME || '';
+const SYNC_AUTO_PUSH_BLOCKED_KEY = 'sync_auto_push_blocked';
 
 const formatBuildTime = (value) => {
     if (!value) return 'unknown';
@@ -593,6 +594,7 @@ const LoginForm = ({ onLogin, showToast, onSyncPull }) => {
     const [showAdvanced, setShowAdvanced] = useState(false);
     const [showDataConflict, setShowDataConflict] = useState(false);
     const [pendingLoginEmail, setPendingLoginEmail] = useState(null);
+    const [isResolvingDataChoice, setIsResolvingDataChoice] = useState(false);
 
     const hasLocalData = () => {
         const shortcuts = localStorage.getItem('shortcuts');
@@ -688,15 +690,31 @@ const LoginForm = ({ onLogin, showToast, onSyncPull }) => {
     };
 
     const handleDataChoice = async (choice) => {
+        if (isResolvingDataChoice) return;
+        setIsResolvingDataChoice(true);
+
         if (choice === 'cloud') {
-            // User chose cloud data
-            if (onSyncPull) {
-                onSyncPull();
-            }
-            setShowDataConflict(false);
-            if (pendingLoginEmail) {
-                onLogin(pendingLoginEmail);
-                setPendingLoginEmail(null);
+            try {
+                if (!onSyncPull) {
+                    throw new Error('同步入口不可用，请刷新后重试');
+                }
+
+                const applied = await onSyncPull({ forceApply: true, throwOnError: true });
+                if (!applied) {
+                    throw new Error('未能从云端应用数据，请检查网络或云端数据后重试');
+                }
+
+                localStorage.removeItem(SYNC_AUTO_PUSH_BLOCKED_KEY);
+                setShowDataConflict(false);
+                showToast('已使用云端数据覆盖本地', 'success');
+                if (pendingLoginEmail) {
+                    onLogin(pendingLoginEmail);
+                    setPendingLoginEmail(null);
+                }
+            } catch (error) {
+                showToast('使用云端数据失败: ' + error.message, 'error');
+            } finally {
+                setIsResolvingDataChoice(false);
             }
         } else if (choice === 'local') {
             // User chose local data - push it to cloud
@@ -712,6 +730,7 @@ const LoginForm = ({ onLogin, showToast, onSyncPull }) => {
                 
                 await syncService.pushData(localData);
                 localStorage.setItem('last_local_update', String(Date.now()));
+                localStorage.removeItem(SYNC_AUTO_PUSH_BLOCKED_KEY);
                 showToast('本地数据已上传到云端', 'success');
                 
                 setShowDataConflict(false);
@@ -721,16 +740,23 @@ const LoginForm = ({ onLogin, showToast, onSyncPull }) => {
                 }
             } catch (error) {
                 showToast('上传数据失败: ' + error.message, 'error');
+            } finally {
+                setIsResolvingDataChoice(false);
             }
         } else if (choice === 'merge') {
             // Smart merge - this will handle login callback after merge completes
-            const success = await mergeData();
-            if (success) {
-                setShowDataConflict(false);
-                if (pendingLoginEmail) {
-                    onLogin(pendingLoginEmail);
-                    setPendingLoginEmail(null);
+            try {
+                const success = await mergeData();
+                if (success) {
+                    localStorage.removeItem(SYNC_AUTO_PUSH_BLOCKED_KEY);
+                    setShowDataConflict(false);
+                    if (pendingLoginEmail) {
+                        onLogin(pendingLoginEmail);
+                        setPendingLoginEmail(null);
+                    }
                 }
+            } finally {
+                setIsResolvingDataChoice(false);
             }
         }
     };
@@ -750,6 +776,7 @@ const LoginForm = ({ onLogin, showToast, onSyncPull }) => {
                 // For new accounts, always push local data first
                 return;
             } else {
+                localStorage.setItem(SYNC_AUTO_PUSH_BLOCKED_KEY, '1');
                 await syncService.login(email, password);
                 
                 // Check if there's local data and cloud data
@@ -763,16 +790,25 @@ const LoginForm = ({ onLogin, showToast, onSyncPull }) => {
                     } else {
                         // Cloud has no data, use local and push
                         localStorage.setItem('last_local_update', String(Date.now()));
+                        localStorage.removeItem(SYNC_AUTO_PUSH_BLOCKED_KEY);
                     }
                 } else {
                     // No local data, pull from cloud
                     if (onSyncPull) {
-                        onSyncPull();
+                        const applied = await onSyncPull({ forceApply: true, throwOnError: true });
+                        if (!applied) {
+                            throw new Error('未能从云端应用数据，请检查网络或云端数据后重试');
+                        }
                     }
+                    localStorage.removeItem(SYNC_AUTO_PUSH_BLOCKED_KEY);
                 }
                 onLogin(email);
             }
         } catch (error) {
+            localStorage.removeItem(SYNC_AUTO_PUSH_BLOCKED_KEY);
+            if (!isRegistering && syncService.isLoggedIn()) {
+                await syncService.logout();
+            }
             showToast(error.message, 'error');
         } finally {
             setIsLoading(false);
@@ -794,6 +830,7 @@ const LoginForm = ({ onLogin, showToast, onSyncPull }) => {
 
                     <button
                         onClick={() => handleDataChoice('cloud')}
+                        disabled={isResolvingDataChoice}
                         className="w-full p-4 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/30 rounded-lg transition-all text-left group"
                     >
                         <div className="flex items-center justify-between mb-2">
@@ -807,6 +844,7 @@ const LoginForm = ({ onLogin, showToast, onSyncPull }) => {
 
                     <button
                         onClick={() => handleDataChoice('local')}
+                        disabled={isResolvingDataChoice}
                         className="w-full p-4 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/30 rounded-lg transition-all text-left group"
                     >
                         <div className="flex items-center justify-between mb-2">
@@ -820,6 +858,7 @@ const LoginForm = ({ onLogin, showToast, onSyncPull }) => {
 
                     <button
                         onClick={() => handleDataChoice('merge')}
+                        disabled={isResolvingDataChoice}
                         className="w-full p-4 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/30 rounded-lg transition-all text-left group"
                     >
                         <div className="flex items-center justify-between mb-2">
@@ -836,7 +875,9 @@ const LoginForm = ({ onLogin, showToast, onSyncPull }) => {
                             setShowDataConflict(false);
                             setPendingLoginEmail(null);
                             await syncService.logout();
+                            localStorage.removeItem(SYNC_AUTO_PUSH_BLOCKED_KEY);
                         }}
+                        disabled={isResolvingDataChoice}
                         className="w-full text-xs text-white/60 hover:text-white transition-colors"
                     >
                         取消登录
