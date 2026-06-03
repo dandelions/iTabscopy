@@ -6,7 +6,7 @@ import ShortcutGrid from './components/ShortcutGrid';
 import NotesPanel from './components/NotesPanel';
 import DataManagement from './components/DataManagement';
 import { Toast } from './components/Toast';
-import { Settings as SettingsIcon, Cloud, StickyNote, Plus, Database, Menu } from 'lucide-react';
+import { Settings as SettingsIcon, Cloud, StickyNote, Plus, Database, Menu, Info } from 'lucide-react';
 
 // 触摸测试工具（开发环境使用）
 if (import.meta.env.DEV) {
@@ -495,6 +495,7 @@ function App() {
                   <button onClick={() => setSettingsTrigger({ tab: 'sync', at: Date.now() })} className="w-12 h-12 rounded-xl liquid-glass-mini hover:scale-110 hover:border-white/40 flex items-center justify-center transition-all active:scale-95" title="同步">
                     <Cloud className={`h-5 w-5 transition-colors ${!isLoggedIn ? 'text-white' : !isOnline ? 'text-red-400' : 'text-green-400'}`} />
                   </button>
+                  <button onClick={() => setSettingsTrigger({ tab: 'about', at: Date.now() })} className="w-12 h-12 rounded-xl liquid-glass-mini hover:scale-110 hover:border-white/40 text-white flex items-center justify-center transition-all active:scale-95" title="关于"><Info className="h-5 w-5" /></button>
                   <button onClick={() => setIsDataManagementOpen(prev => !prev)} className="w-12 h-12 rounded-xl liquid-glass-mini hover:scale-110 hover:border-white/40 text-white flex items-center justify-center transition-all active:scale-95" title="数据管理"><Database className="h-5 w-5" /></button>
                 </div>
             )}

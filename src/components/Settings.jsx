@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Cloud, RefreshCw, Globe, LogOut, Github, Combine, Save, Upload } from 'lucide-react';
+import { X, Cloud, RefreshCw, Globe, LogOut, Github, Combine, Save, Upload, Info, Tag, Clock } from 'lucide-react';
 import { fetchRandomPhoto, cacheImage } from '../utils/unsplash';
 import WallpaperModal from './WallpaperModal';
 import IconSelector from './IconSelector';
@@ -7,6 +7,24 @@ import ToastContainer, { useToast } from './Toast';
 import syncService from '../services/syncService';
 import { fetchBingDailyPhoto, cacheImage as cacheBingImage } from '../utils/imageService'; // 确保路径正确
 
+const APP_VERSION = import.meta.env.VITE_APP_VERSION || 'unknown';
+const BUILD_TIME = import.meta.env.VITE_BUILD_TIME || '';
+
+const formatBuildTime = (value) => {
+    if (!value) return 'unknown';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+
+    return new Intl.DateTimeFormat('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    }).format(date);
+};
 
 const Settings = ({
     gridConfig,
@@ -76,7 +94,8 @@ const Settings = ({
 
     const tabTitle = activeTab === 'shortcuts' ? '链接'
         : activeTab === 'sync' ? '同步'
-            : '通用';
+            : activeTab === 'about' ? '关于'
+                : '通用';
 
     return (
         <>
@@ -114,22 +133,6 @@ const Settings = ({
                                 <div>
                                     <h3 className="text-sm font-medium text-white mb-4">添加新快捷方式</h3>
                                     <AddShortcutForm onAddShortcut={onAddShortcut} showToast={showToast} />
-                                </div>
-
-                                <div className="pt-4 border-t border-white/10">
-                                    <h3 className="text-sm font-medium text-white mb-4">关于</h3>
-                                    <a
-                                        href="https://github.com/tenoms"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="flex items-center gap-3 p-3 bg-white/5 hover:bg-white/10 rounded-lg transition-all border border-white/10 hover:border-white/20 group"
-                                    >
-                                        <Github className="h-5 w-5 text-white/80 group-hover:text-white transition-colors" />
-                                        <div className="flex-1">
-                                            <div className="text-sm text-white font-medium">iTabs</div>
-                                            <div className="text-xs text-white/40">View source on GitHub</div>
-                                        </div>
-                                    </a>
                                 </div>
 
                             </div>
@@ -382,6 +385,53 @@ const Settings = ({
                                     bgUrl={bgUrl}
                                     showToast={showToast}
                                 />
+                            </div>
+                        )}
+
+                        {activeTab === 'about' && (
+                            <div className="space-y-6">
+                                <div className="flex items-center gap-4">
+                                    <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-white/10 border border-white/10">
+                                        <Info className="h-7 w-7 text-white" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-semibold text-white">iTabs</h3>
+                                        <p className="text-sm text-white/50">Chrome 新标签页扩展</p>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                    <div className="flex items-center gap-3 p-3 bg-white/5 rounded-lg border border-white/10">
+                                        <Tag className="h-5 w-5 text-white/70" />
+                                        <div className="min-w-0 flex-1">
+                                            <div className="text-xs text-white/40">当前 tag 版本</div>
+                                            <div className="text-sm font-medium text-white break-all">{APP_VERSION}</div>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-3 p-3 bg-white/5 rounded-lg border border-white/10">
+                                        <Clock className="h-5 w-5 text-white/70" />
+                                        <div className="min-w-0 flex-1">
+                                            <div className="text-xs text-white/40">编译时间</div>
+                                            <div className="text-sm font-medium text-white break-all" title={BUILD_TIME}>
+                                                {formatBuildTime(BUILD_TIME)}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <a
+                                    href="https://github.com/tenoms"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-3 p-3 bg-white/5 hover:bg-white/10 rounded-lg transition-all border border-white/10 hover:border-white/20 group"
+                                >
+                                    <Github className="h-5 w-5 text-white/80 group-hover:text-white transition-colors" />
+                                    <div className="flex-1">
+                                        <div className="text-sm text-white font-medium">GitHub</div>
+                                        <div className="text-xs text-white/40">View source on GitHub</div>
+                                    </div>
+                                </a>
                             </div>
                         )}
 
