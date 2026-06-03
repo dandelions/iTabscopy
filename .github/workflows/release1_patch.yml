@@ -3,8 +3,6 @@ name: Build Chrome Extension release1_patch
 on:
   push:
     branches: [ release1.0_patch ]
-    tags:
-      - 'v*'
   pull_request:
     branches: [ release1.0_patch ]
   workflow_dispatch:
