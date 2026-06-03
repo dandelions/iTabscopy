@@ -21,6 +21,7 @@ export default {
             if (path === '/api/auth/logout') return await handleLogout(request, env, corsHeaders);
             if (path === '/api/sync/pull') return await handlePull(request, env, corsHeaders);
             if (path === '/api/sync/push') return await handlePush(request, env, corsHeaders);
+            if (path === '/api/webdav/request') return await handleWebDavRequest(request, env, corsHeaders);
 
             // ✨ 新增：Bing 每日壁纸获取接口（公开接口，无需 Bearer Token 校验）
             if (path === '/api/bing') return await handleBingWallpaper(corsHeaders);
@@ -147,4 +148,47 @@ async function handlePush(request, env, corsHeaders) {
     const syncData = { ...data, updatedAt: data.updatedAt || Date.now() };
     await env.NewTab_KV.put(`sync:${email}`, JSON.stringify(syncData));
     return jsonResponse({ success: true, updatedAt: syncData.updatedAt }, 200, corsHeaders);
+}
+
+async function handleWebDavRequest(request, env, corsHeaders) {
+    await verifyToken(request, env);
+
+    const { method, url, username, password, contentType, body } = await request.json();
+    const normalizedMethod = String(method || '').toUpperCase();
+    if (!['PUT', 'DELETE'].includes(normalizedMethod)) {
+        return jsonResponse({ error: '不支持的 WebDAV 请求方法' }, 400, corsHeaders);
+    }
+
+    let targetUrl;
+    try {
+        targetUrl = new URL(url);
+    } catch {
+        return jsonResponse({ error: '无效的 WebDAV 地址' }, 400, corsHeaders);
+    }
+
+    if (!['http:', 'https:'].includes(targetUrl.protocol)) {
+        return jsonResponse({ error: 'WebDAV 地址仅支持 HTTP 或 HTTPS' }, 400, corsHeaders);
+    }
+
+    const headers = {};
+    if (contentType) headers['Content-Type'] = contentType;
+    if (username || password) {
+        headers.Authorization = `Basic ${btoa(unescape(encodeURIComponent(`${username || ''}:${password || ''}`)))}`;
+    }
+
+    const response = await fetch(targetUrl.toString(), {
+        method: normalizedMethod,
+        headers,
+        body: normalizedMethod === 'DELETE' ? undefined : body,
+    });
+
+    if (response.ok) {
+        return jsonResponse({ success: true, status: response.status }, 200, corsHeaders);
+    }
+
+    const errorText = await response.text();
+    return jsonResponse({
+        error: errorText || `WebDAV 请求失败：HTTP ${response.status}`,
+        status: response.status,
+    }, response.status, corsHeaders);
 }

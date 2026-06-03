@@ -131,6 +131,50 @@ class SyncService {
         return headers;
     }
 
+    shouldProxyWebDav(config) {
+        try {
+            const targetUrl = new URL(config.url);
+            return targetUrl.protocol === 'http:' && !!this.getWorkerUrl();
+        } catch {
+            return false;
+        }
+    }
+
+    async fetchWebDav(targetUrl, config, options) {
+        if (!this.shouldProxyWebDav(config)) {
+            if (targetUrl.startsWith('http://') && window.location.protocol === 'https:') {
+                throw new Error('HTTPS 页面访问 HTTP WebDAV 需要配置 Cloudflare Worker 代理');
+            }
+
+            return fetch(targetUrl, {
+                method: options.method,
+                headers: this.getWebDavHeaders(config, options.contentType),
+                body: options.body,
+            });
+        }
+
+        if (!this.token) {
+            throw new Error('HTTP WebDAV 代理需要先登录云同步');
+        }
+
+        const workerUrl = this.requireWorkerUrl();
+        return fetch(`${workerUrl}/api/webdav/request`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${this.token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                method: options.method,
+                url: targetUrl,
+                username: config.username,
+                password: config.password,
+                contentType: options.contentType,
+                body: options.body,
+            }),
+        });
+    }
+
     async testWebDavConnection() {
         const config = this.requireWebDavConfig();
         if (!this.isOnline()) {
@@ -139,9 +183,9 @@ class SyncService {
 
         const testFileName = `.itabs-webdav-test-${Date.now()}.txt`;
         const targetUrl = this.getWebDavTargetUrl(config, testFileName);
-        const response = await fetch(targetUrl, {
+        const response = await this.fetchWebDav(targetUrl, config, {
             method: 'PUT',
-            headers: this.getWebDavHeaders(config, 'text/plain'),
+            contentType: 'text/plain',
             body: 'iTabs WebDAV test',
         });
 
@@ -150,9 +194,9 @@ class SyncService {
         }
 
         try {
-            await fetch(targetUrl, {
+            await this.fetchWebDav(targetUrl, config, {
                 method: 'DELETE',
-                headers: this.getWebDavHeaders(config, 'text/plain'),
+                contentType: 'text/plain',
             });
         } catch (error) {
             console.warn('Failed to remove WebDAV test file:', error);
@@ -169,9 +213,9 @@ class SyncService {
 
         const backupData = data?.version ? data : this.createBackupData(data || {});
         const targetUrl = this.getWebDavTargetUrl(config);
-        const response = await fetch(targetUrl, {
+        const response = await this.fetchWebDav(targetUrl, config, {
             method: 'PUT',
-            headers: this.getWebDavHeaders(config),
+            contentType: 'application/json',
             body: JSON.stringify(backupData, null, 2),
         });
 
