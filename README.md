@@ -19,7 +19,7 @@
 1. 编译项目：
 ```bash
 # 克隆仓库
-git clone https://github.com/tenoms/iTabs.git
+git clone https://github.com/dandelions/iTabscopy.git
 # 进入项目目录
 cd iTabs
 # 安装依赖
@@ -35,7 +35,7 @@ npm run build
 
 ### 发布版安装
 
-1. 从[release](https://github.com/tenoms/iTabs/releases)下载最新版本。
+1. 从[release](https://github.com/dandelions/iTabscopy/releases)下载最新版本。
 
 2. 解压下载的文件。
 
@@ -45,7 +45,7 @@ npm run build
 
 同步功能依赖于 Cloudflare Worker。
 
-1. 复制 [worker.js](https://github.com/tenoms/iTabs/blob/main/workers/workers.js)的内容到 Cloudflare Worker，部署一个新的workers项目。
+1. 复制 [worker.js](https://github.com/dandelions/iTabscopy/tree/main/workers/workers.js)的内容到 Cloudflare Worker，部署一个新的workers项目。
 
 2. 配置 KV 命名空间
    - 在 Cloudflare 控制台创建一个 KV 命名空间。
@@ -56,7 +56,7 @@ npm run build
 
 ## 🤝 致谢
 
-本插件基于：[AestheticNewTab](https://github.com/jiangnan1224/AestheticNewTab) 进行二次开发和定制，感谢原作者的辛勤付出！
+本插件基于：[AestheticNewTab](https://github.com/jiangnan1224/AestheticNewTab) 和[iTabs](https://github.com/tenoms/iTabs)进行二次开发和定制，感谢原作者的辛勤付出！
 
 ## 开发者
 - Claude Sonnet 4.5
