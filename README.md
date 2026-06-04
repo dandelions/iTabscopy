@@ -61,7 +61,7 @@ npm run build
 ## 开发者
 - Claude Sonnet 4.5
 - Gemini Pro 3.0
-- GPT-5.1-Codex-Max
+- GPT-5.5-Codex
 
 ## 📸 一图胜千言
 
