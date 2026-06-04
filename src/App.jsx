@@ -25,6 +25,7 @@ const DEFAULT_BG_URL = 'https://images.unsplash.com/photo-1472214103451-9374bd1c
 const SYNC_AUTO_PUSH_BLOCKED_KEY = 'sync_auto_push_blocked';
 const LAST_LOCAL_UPDATE_KEY = 'last_local_update';
 const LAST_CLOUD_UPDATE_KEY = 'last_cloud_update';
+const LAST_SYNCED_SNAPSHOT_KEY = 'last_synced_snapshot';
 const SYNC_PUSH_DEBOUNCE_MS = 700;
 const SYNC_POLL_INTERVAL_MS = 5000;
 
@@ -41,6 +42,20 @@ const readStoredTimestamp = (key) => {
   localStorage.removeItem(key);
   return null;
 };
+
+const normalizeSyncData = (data = {}) => {
+  const source = data && typeof data === 'object' ? data : {};
+  return {
+    shortcuts: Array.isArray(source.shortcuts) ? source.shortcuts : [],
+    gridConfig: source.gridConfig && typeof source.gridConfig === 'object' ? source.gridConfig : {},
+    bgConfig: source.bgConfig && typeof source.bgConfig === 'object' ? source.bgConfig : {},
+    bgUrl: typeof source.bgUrl === 'string' ? source.bgUrl : '',
+    todos: Array.isArray(source.todos) ? source.todos : [],
+    notes: Array.isArray(source.notes) ? source.notes : [],
+  };
+};
+
+const createSyncSnapshot = (data) => JSON.stringify(normalizeSyncData(data));
 
 function App() {
   // 动态更新视口高度
@@ -111,6 +126,11 @@ function App() {
 
   const isPullingRef = useRef(false);
   const lastPushedSnapshotRef = useRef('');
+  const currentSyncDataRef = useRef(null);
+
+  useEffect(() => {
+    currentSyncDataRef.current = { shortcuts, gridConfig, bgConfig, bgUrl, todos, notes };
+  }, [shortcuts, gridConfig, bgConfig, bgUrl, todos, notes]);
 
   const isPristineDefaultData = useCallback(() => {
     const hasLocalUpdate = localStorage.getItem('last_local_update') !== null;
@@ -127,14 +147,23 @@ function App() {
     localStorage.setItem(LAST_LOCAL_UPDATE_KEY, String(Date.now()));
   };
 
-  const markCloudVersionSynced = useCallback((updatedAt) => {
+  const markCloudVersionSynced = useCallback((updatedAt, syncedData) => {
     const timestamp = Number(updatedAt);
-    if (!Number.isFinite(timestamp)) return;
-    localStorage.setItem(LAST_CLOUD_UPDATE_KEY, String(timestamp));
-    localStorage.setItem(LAST_LOCAL_UPDATE_KEY, String(timestamp));
+    if (Number.isFinite(timestamp)) {
+      localStorage.setItem(LAST_CLOUD_UPDATE_KEY, String(timestamp));
+      localStorage.setItem(LAST_LOCAL_UPDATE_KEY, String(timestamp));
+    }
+    if (syncedData) {
+      localStorage.setItem(LAST_SYNCED_SNAPSHOT_KEY, createSyncSnapshot(syncedData));
+    }
   }, []);
 
   const hasPendingLocalChanges = useCallback(() => {
+    const syncedSnapshot = localStorage.getItem(LAST_SYNCED_SNAPSHOT_KEY);
+    if (syncedSnapshot !== null) {
+      return createSyncSnapshot(currentSyncDataRef.current) !== syncedSnapshot;
+    }
+
     const lastLocalUpdate = readStoredTimestamp(LAST_LOCAL_UPDATE_KEY);
     const lastCloudUpdate = readStoredTimestamp(LAST_CLOUD_UPDATE_KEY);
     return Boolean(lastLocalUpdate && lastCloudUpdate && lastLocalUpdate > lastCloudUpdate);
@@ -186,40 +215,50 @@ function App() {
       let updated = false;
 
       if (shouldApplyCloud) {
-        if (cloudData.shortcuts) {
-          setShortcuts(cloudData.shortcuts);
-          localStorage.setItem('shortcuts', JSON.stringify(cloudData.shortcuts));
+        const currentData = currentSyncDataRef.current;
+        const appliedData = {
+          shortcuts: Array.isArray(cloudData.shortcuts) ? cloudData.shortcuts : currentData.shortcuts,
+          gridConfig: cloudData.gridConfig && typeof cloudData.gridConfig === 'object' ? cloudData.gridConfig : currentData.gridConfig,
+          bgConfig: cloudData.bgConfig && typeof cloudData.bgConfig === 'object' ? cloudData.bgConfig : currentData.bgConfig,
+          bgUrl: typeof cloudData.bgUrl === 'string' ? cloudData.bgUrl : currentData.bgUrl,
+          todos: Array.isArray(cloudData.todos) ? cloudData.todos : currentData.todos,
+          notes: Array.isArray(cloudData.notes) ? cloudData.notes : currentData.notes,
+        };
+
+        if (Array.isArray(cloudData.shortcuts)) {
+          setShortcuts(appliedData.shortcuts);
+          localStorage.setItem('shortcuts', JSON.stringify(appliedData.shortcuts));
           updated = true;
         }
-        if (cloudData.gridConfig) {
-          setGridConfig(cloudData.gridConfig);
-          localStorage.setItem('grid_config', JSON.stringify(cloudData.gridConfig));
+        if (cloudData.gridConfig && typeof cloudData.gridConfig === 'object') {
+          setGridConfig(appliedData.gridConfig);
+          localStorage.setItem('grid_config', JSON.stringify(appliedData.gridConfig));
           updated = true;
         }
-        if (cloudData.bgConfig) {
-          setBgConfig(cloudData.bgConfig);
-          localStorage.setItem('bg_config', JSON.stringify(cloudData.bgConfig));
+        if (cloudData.bgConfig && typeof cloudData.bgConfig === 'object') {
+          setBgConfig(appliedData.bgConfig);
+          localStorage.setItem('bg_config', JSON.stringify(appliedData.bgConfig));
           updated = true;
         }
-        if (cloudData.bgUrl) {
-          setBgUrl(cloudData.bgUrl);
-          localStorage.setItem('bg_url', cloudData.bgUrl);
+        if (typeof cloudData.bgUrl === 'string') {
+          setBgUrl(appliedData.bgUrl);
+          localStorage.setItem('bg_url', appliedData.bgUrl);
           updated = true;
         }
-        if (cloudData.todos) {
-          setTodos(cloudData.todos);
-          localStorage.setItem('todos', JSON.stringify(cloudData.todos));
+        if (Array.isArray(cloudData.todos)) {
+          setTodos(appliedData.todos);
+          localStorage.setItem('todos', JSON.stringify(appliedData.todos));
           updated = true;
         }
-        if (cloudData.notes) {
-          setNotes(cloudData.notes);
-          localStorage.setItem('notes', JSON.stringify(cloudData.notes));
+        if (Array.isArray(cloudData.notes)) {
+          setNotes(appliedData.notes);
+          localStorage.setItem('notes', JSON.stringify(appliedData.notes));
           setActiveNoteId(null);
           updated = true;
         }
 
         if (updated) {
-          markCloudVersionSynced(cloudUpdatedAt || Date.now());
+          markCloudVersionSynced(cloudUpdatedAt || Date.now(), appliedData);
         }
       }
 
@@ -404,8 +443,8 @@ function App() {
     if (!syncService.isLoggedIn() || isPullingRef.current) return;
     if (localStorage.getItem(SYNC_AUTO_PUSH_BLOCKED_KEY) === '1') return;
     if (isPristineDefaultData()) return;
-    const data = { shortcuts, gridConfig, bgConfig, bgUrl, todos, notes };
-    const snapshot = JSON.stringify(data);
+    const data = currentSyncDataRef.current;
+    const snapshot = createSyncSnapshot(data);
     if (!hasPendingLocalChanges()) {
       if (snapshot === lastPushedSnapshotRef.current) return;
       const lastLocalUpdate = readStoredTimestamp(LAST_LOCAL_UPDATE_KEY);
@@ -421,7 +460,7 @@ function App() {
         const result = await syncService.pushData(data);
         if (result && result.updatedAt) {
           const numeric = Number(result.updatedAt);
-          if (Number.isFinite(numeric)) markCloudVersionSynced(numeric);
+          if (Number.isFinite(numeric)) markCloudVersionSynced(numeric, data);
         }
         lastPushedSnapshotRef.current = snapshot;
       } catch (error) {

@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import { dirname, resolve } from 'path'
 import { fileURLToPath } from 'url'
 import { execSync } from 'child_process'
+import { existsSync, readFileSync, writeFileSync } from 'fs'
 import process from 'process'
 import pkg from './package.json' with { type: 'json' }
 
@@ -15,7 +16,7 @@ const getTagVersion = () => {
   }
 
   try {
-    return execSync('git describe --tags --abbrev=0', { stdio: ['ignore', 'pipe', 'ignore'] })
+    return execSync('git describe --tags --exact-match', { stdio: ['ignore', 'pipe', 'ignore'] })
       .toString()
       .trim()
   } catch {
@@ -23,11 +24,33 @@ const getTagVersion = () => {
   }
 }
 
+const getExtensionVersion = () => {
+  const version = getTagVersion().replace(/^v/i, '')
+  if (/^\d+(\.\d+){0,3}$/.test(version)) return version
+  return pkg.version.replace(/^v/i, '')
+}
+
 const getBuildTime = () => process.env.VITE_BUILD_TIME || new Date().toISOString()
+
+const syncManifestVersion = () => ({
+  name: 'sync-manifest-version',
+  apply: 'build',
+  writeBundle(outputOptions) {
+    const outDir = outputOptions.dir
+      ? resolve(__dirname, outputOptions.dir)
+      : resolve(__dirname, 'dist')
+    const manifestPath = resolve(outDir, 'manifest.json')
+    if (!existsSync(manifestPath)) return
+
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+    manifest.version = getExtensionVersion()
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 4)}\n`)
+  },
+})
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), syncManifestVersion()],
   define: {
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(getTagVersion()),
     'import.meta.env.VITE_BUILD_TIME': JSON.stringify(getBuildTime()),

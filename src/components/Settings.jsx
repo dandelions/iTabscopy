@@ -410,7 +410,7 @@ const Settings = ({
                                 </div>
 
                                 <a
-                                    href="https://github.com/tenoms"
+                                    href="https://github.com/dandelions/iTabscopy"
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="flex items-center gap-3 p-3 bg-white/5 hover:bg-white/10 rounded-lg transition-all border border-white/10 hover:border-white/20 group"
