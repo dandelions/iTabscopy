@@ -23,6 +23,24 @@ import syncService from './services/syncService';
 
 const DEFAULT_BG_URL = 'https://images.unsplash.com/photo-1472214103451-9374bd1c798e?q=80&w=2070&auto=format&fit=crop';
 const SYNC_AUTO_PUSH_BLOCKED_KEY = 'sync_auto_push_blocked';
+const LAST_LOCAL_UPDATE_KEY = 'last_local_update';
+const LAST_CLOUD_UPDATE_KEY = 'last_cloud_update';
+const SYNC_PUSH_DEBOUNCE_MS = 700;
+const SYNC_POLL_INTERVAL_MS = 5000;
+
+const readStoredTimestamp = (key) => {
+  const raw = localStorage.getItem(key);
+  if (raw === null) return null;
+  const numeric = Number(raw);
+  if (Number.isFinite(numeric)) return numeric;
+  const parsed = Date.parse(raw);
+  if (Number.isFinite(parsed)) {
+    localStorage.setItem(key, String(parsed));
+    return parsed;
+  }
+  localStorage.removeItem(key);
+  return null;
+};
 
 function App() {
   // 动态更新视口高度
@@ -92,6 +110,7 @@ function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(syncService.isLoggedIn());
 
   const isPullingRef = useRef(false);
+  const lastPushedSnapshotRef = useRef('');
 
   const isPristineDefaultData = useCallback(() => {
     const hasLocalUpdate = localStorage.getItem('last_local_update') !== null;
@@ -105,8 +124,21 @@ function App() {
   }, [shortcuts, todos, notes]);
 
   const updateLocalTimestamp = () => {
-    localStorage.setItem('last_local_update', String(Date.now()));
+    localStorage.setItem(LAST_LOCAL_UPDATE_KEY, String(Date.now()));
   };
+
+  const markCloudVersionSynced = useCallback((updatedAt) => {
+    const timestamp = Number(updatedAt);
+    if (!Number.isFinite(timestamp)) return;
+    localStorage.setItem(LAST_CLOUD_UPDATE_KEY, String(timestamp));
+    localStorage.setItem(LAST_LOCAL_UPDATE_KEY, String(timestamp));
+  }, []);
+
+  const hasPendingLocalChanges = useCallback(() => {
+    const lastLocalUpdate = readStoredTimestamp(LAST_LOCAL_UPDATE_KEY);
+    const lastCloudUpdate = readStoredTimestamp(LAST_CLOUD_UPDATE_KEY);
+    return Boolean(lastLocalUpdate && lastCloudUpdate && lastLocalUpdate > lastCloudUpdate);
+  }, []);
 
   const createBackupData = useCallback(() => syncService.createBackupData({
     todos,
@@ -144,11 +176,13 @@ function App() {
         return false;
       }
 
-      const lastRaw = localStorage.getItem('last_local_update');
-      const lastLocalUpdate = lastRaw !== null && Number.isFinite(Number(lastRaw)) ? Number(lastRaw) : null;
+      const lastLocalUpdate = readStoredTimestamp(LAST_LOCAL_UPDATE_KEY);
+      const lastCloudUpdate = readStoredTimestamp(LAST_CLOUD_UPDATE_KEY);
       const cloudUpdatedAt = Number.isFinite(Number(cloudData.updatedAt)) ? Number(cloudData.updatedAt) : null;
 
-      const shouldApplyCloud = forceApply || (cloudUpdatedAt ? (!lastLocalUpdate || cloudUpdatedAt > lastLocalUpdate) : !lastLocalUpdate);
+      const knownRemoteVersion = lastCloudUpdate || lastLocalUpdate || 0;
+      const cloudIsNewer = cloudUpdatedAt ? cloudUpdatedAt > knownRemoteVersion : !lastLocalUpdate;
+      const shouldApplyCloud = forceApply || (cloudIsNewer && !hasPendingLocalChanges());
       let updated = false;
 
       if (shouldApplyCloud) {
@@ -185,7 +219,7 @@ function App() {
         }
 
         if (updated) {
-          localStorage.setItem('last_local_update', String(cloudUpdatedAt || Date.now()));
+          markCloudVersionSynced(cloudUpdatedAt || Date.now());
         }
       }
 
@@ -197,17 +231,25 @@ function App() {
       if (throwOnError) throw error;
       return false;
     }
-  }, []);
+  }, [hasPendingLocalChanges, markCloudVersionSynced]);
 
-  // 👍 修复位置 2：原第 179 行报错的 Effect。通过精简同步赋值并添加微任务隔离彻底修复
   useEffect(() => {
     const timer = setTimeout(() => {
       pullFromCloud();
     }, 0);
 
     const handleStorageChange = (e) => {
-      if (e.key === 'shortcuts' && e.newValue) {
-        setShortcuts(JSON.parse(e.newValue));
+      if (e.storageArea !== localStorage || !e.key || e.newValue === null) return;
+
+      try {
+        if (e.key === 'shortcuts') setShortcuts(JSON.parse(e.newValue));
+        if (e.key === 'todos') setTodos(JSON.parse(e.newValue));
+        if (e.key === 'notes') setNotes(JSON.parse(e.newValue));
+        if (e.key === 'grid_config') setGridConfig(JSON.parse(e.newValue));
+        if (e.key === 'bg_config') setBgConfig(JSON.parse(e.newValue));
+        if (e.key === 'bg_url') setBgUrl(e.newValue);
+      } catch (error) {
+        console.warn('Failed to apply storage update:', error);
       }
     };
     window.addEventListener('storage', handleStorageChange);
@@ -219,7 +261,28 @@ function App() {
   }, [pullFromCloud]);
 
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
+    if (!isLoggedIn || !isOnline) return undefined;
+
+    const pullWhenActive = () => {
+      if (document.visibilityState !== 'hidden') pullFromCloud();
+    };
+
+    const interval = setInterval(pullWhenActive, SYNC_POLL_INTERVAL_MS);
+    window.addEventListener('focus', pullWhenActive);
+    document.addEventListener('visibilitychange', pullWhenActive);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', pullWhenActive);
+      document.removeEventListener('visibilitychange', pullWhenActive);
+    };
+  }, [isLoggedIn, isOnline, pullFromCloud]);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      pullFromCloud();
+    };
     const handleOffline = () => setIsOnline(false);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
@@ -227,7 +290,7 @@ function App() {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, []);
+  }, [pullFromCloud]);
 
   useEffect(() => {
     const checkLoginStatus = () => setIsLoggedIn(syncService.isLoggedIn());
@@ -280,6 +343,12 @@ function App() {
       updateLocalTimestamp();
       return updated;
     });
+  };
+
+  const handleBgUpdate = (url) => {
+    setBgUrl(url);
+    localStorage.setItem('bg_url', url);
+    updateLocalTimestamp();
   };
 
   useEffect(() => {
@@ -335,21 +404,33 @@ function App() {
     if (!syncService.isLoggedIn() || isPullingRef.current) return;
     if (localStorage.getItem(SYNC_AUTO_PUSH_BLOCKED_KEY) === '1') return;
     if (isPristineDefaultData()) return;
+    const data = { shortcuts, gridConfig, bgConfig, bgUrl, todos, notes };
+    const snapshot = JSON.stringify(data);
+    if (!hasPendingLocalChanges()) {
+      if (snapshot === lastPushedSnapshotRef.current) return;
+      const lastLocalUpdate = readStoredTimestamp(LAST_LOCAL_UPDATE_KEY);
+      const lastCloudUpdate = readStoredTimestamp(LAST_CLOUD_UPDATE_KEY);
+      if (lastLocalUpdate && lastCloudUpdate && lastLocalUpdate <= lastCloudUpdate) {
+        lastPushedSnapshotRef.current = snapshot;
+        return;
+      }
+    }
+
     const syncData = async () => {
       try {
-        const data = { shortcuts, gridConfig, bgConfig, bgUrl, todos, notes };
         const result = await syncService.pushData(data);
         if (result && result.updatedAt) {
           const numeric = Number(result.updatedAt);
-          if (Number.isFinite(numeric)) localStorage.setItem('last_local_update', String(numeric));
+          if (Number.isFinite(numeric)) markCloudVersionSynced(numeric);
         }
+        lastPushedSnapshotRef.current = snapshot;
       } catch (error) {
         console.error('Auto-sync failed:', error);
       }
     };
-    const timeoutId = setTimeout(syncData, 2000);
+    const timeoutId = setTimeout(syncData, SYNC_PUSH_DEBOUNCE_MS);
     return () => clearTimeout(timeoutId);
-  }, [shortcuts, gridConfig, bgConfig, bgUrl, todos, notes, isPristineDefaultData]);
+  }, [shortcuts, gridConfig, bgConfig, bgUrl, todos, notes, isPristineDefaultData, hasPendingLocalChanges, markCloudVersionSynced]);
 
   useEffect(() => { localStorage.setItem('todos', JSON.stringify(todos)); }, [todos]);
 
@@ -366,16 +447,18 @@ function App() {
   }, [notes, activeNoteId]);
 
   const handleAddTodo = (text) => {
-    const newTodo = { id: Date.now(), text, completed: false, createdAt: new Date().toISOString(), completedAt: null };
+    const now = new Date().toISOString();
+    const newTodo = { id: Date.now(), text, completed: false, createdAt: now, updatedAt: now, completedAt: null };
     setTodos(prev => [newTodo, ...prev]);
     updateLocalTimestamp();
   };
 
   const handleToggleTodo = (id) => {
+    const now = new Date().toISOString();
     setTodos(prev => prev.map(todo => {
       if (todo.id !== id) return todo;
       const completed = !todo.completed;
-      return { ...todo, completed, completedAt: completed ? new Date().toISOString() : null };
+      return { ...todo, completed, updatedAt: now, completedAt: completed ? now : null };
     }));
     updateLocalTimestamp();
   };
@@ -459,6 +542,7 @@ function App() {
     if (data.bgConfig && typeof data.bgConfig === 'object') { setBgConfig(data.bgConfig); localStorage.setItem('bg_config', JSON.stringify(data.bgConfig)); importedCount++; }
     if (data.bgUrl && typeof data.bgUrl === 'string') { setBgUrl(data.bgUrl); localStorage.setItem('bg_url', data.bgUrl); importedCount++; }
 
+    updateLocalTimestamp();
     setToast({ message: `数据导入成功！已导入 ${importedCount} 项数据。`, type: 'success' });
   };
 
@@ -469,7 +553,7 @@ function App() {
             bgConfig={bgConfig}
             onConfigChange={handleConfigChange}
             onBgConfigChange={handleBgConfigChange}
-            onBgUpdate={setBgUrl}
+            onBgUpdate={handleBgUpdate}
             onAddShortcut={handleAddShortcut}
             shortcuts={shortcuts}
             todos={todos}
@@ -511,6 +595,10 @@ function App() {
           onAddTodo={handleAddTodo}
           onToggleTodo={handleToggleTodo}
           onDeleteTodo={handleDeleteTodo}
+          onRefreshFromCloud={isLoggedIn ? async () => {
+            const applied = await pullFromCloud({ forceApply: true, throwOnError: true });
+            if (!applied) throw new Error('云端暂无可应用数据');
+          } : undefined}
           isOpen={isNotesOpen}
           onOpenChange={setIsNotesOpen}
         />

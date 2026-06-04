@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Check, X } from 'lucide-react';
 import IconSelector from '../components/IconSelector';
+import syncService from '../services/syncService';
 
 const Popup = () => {
     const [url, setUrl] = useState('');
@@ -79,6 +80,21 @@ const Popup = () => {
             await chrome.storage.local.set({
                 last_local_update: String(Date.now())
             });
+
+            if (syncService.isLoggedIn()) {
+                try {
+                    await syncService.pushData({
+                        shortcuts: updatedShortcuts,
+                        todos: JSON.parse(localStorage.getItem('todos') || '[]'),
+                        notes: JSON.parse(localStorage.getItem('notes') || '[]'),
+                        gridConfig: JSON.parse(localStorage.getItem('grid_config') || '{}'),
+                        bgConfig: JSON.parse(localStorage.getItem('bg_config') || '{}'),
+                        bgUrl: localStorage.getItem('bg_url') || ''
+                    });
+                } catch (error) {
+                    console.warn('Failed to sync shortcut from popup:', error);
+                }
+            }
 
             setSaved(true);
             setTimeout(() => {

@@ -1,4 +1,7 @@
 // Sync service for communicating with Cloudflare Worker
+const LAST_CLOUD_UPDATE_KEY = 'last_cloud_update';
+const LAST_LOCAL_UPDATE_KEY = 'last_local_update';
+
 class SyncService {
     constructor() {
         this.token = localStorage.getItem('sync_token');
@@ -191,6 +194,11 @@ class SyncService {
         }
 
         const result = await response.json();
+        const updatedAt = Number(result.updatedAt || syncData.updatedAt);
+        if (Number.isFinite(updatedAt)) {
+            localStorage.setItem(LAST_CLOUD_UPDATE_KEY, String(updatedAt));
+            localStorage.setItem(LAST_LOCAL_UPDATE_KEY, String(updatedAt));
+        }
         localStorage.setItem('last_sync', String(Date.now()));
         return result;
     }

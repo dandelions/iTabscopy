@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { X, Plus, Trash2, Check, Download, Upload, Search, StickyNote, ClipboardList, Circle, CheckCircle2, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { X, Plus, Trash2, Check, Download, Upload, Search, StickyNote, ClipboardList, Circle, CheckCircle2, PanelLeftClose, PanelLeftOpen, RefreshCw } from 'lucide-react';
 import { marked } from 'marked';
 
 const formatTime = (iso) => {
@@ -98,6 +98,7 @@ export default function NotesPanel({
   onAddTodo,
   onToggleTodo,
   onDeleteTodo,
+  onRefreshFromCloud,
   isOpen,
   onOpenChange,
 }) {
@@ -107,6 +108,7 @@ export default function NotesPanel({
     const [activeSection, setActiveSection] = useState('notes');
     const [todoInput, setTodoInput] = useState('');
     const [isSidebarHidden, setIsSidebarHidden] = useState(false);
+    const [refreshState, setRefreshState] = useState('idle');
     const activeNote = useMemo(() => notes.find(n => n.id === activeNoteId) || null, [notes, activeNoteId]);
     const activeNoteContent = activeNote?.content || '';
     const activeTodos = useMemo(() => todos.filter(todo => !todo.completed), [todos]);
@@ -203,6 +205,38 @@ export default function NotesPanel({
         setTodoInput('');
     };
 
+    const handleRefreshFromCloud = async () => {
+        if (!onRefreshFromCloud || refreshState === 'loading') return;
+        setRefreshState('loading');
+        try {
+            await onRefreshFromCloud();
+            setRefreshState('success');
+        } catch (error) {
+            console.error('Failed to refresh notes from cloud:', error);
+            setRefreshState('error');
+        } finally {
+            setTimeout(() => setRefreshState('idle'), 1500);
+        }
+    };
+
+    const renderRefreshButton = (className = '') => (
+        <button
+            type="button"
+            onClick={handleRefreshFromCloud}
+            disabled={!onRefreshFromCloud || refreshState === 'loading'}
+            className={`p-2 rounded-full hover:bg-white/10 transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                refreshState === 'success'
+                    ? 'text-green-400'
+                    : refreshState === 'error'
+                        ? 'text-red-400'
+                        : 'text-white/70 hover:text-white'
+            } ${className}`}
+            title="从 CF 拉取最新数据"
+        >
+            <RefreshCw className={`h-4 w-4 ${refreshState === 'loading' ? 'animate-spin' : ''}`} />
+        </button>
+    );
+
     useEffect(() => {
         if (isOpen && activeSection === 'notes' && !activeNote && notes[0]) {
             onSelectNote?.(notes[0].id);
@@ -235,6 +269,7 @@ export default function NotesPanel({
                         <div className="flex items-center justify-between">
                             <h3 className="text-sm font-semibold text-white">笔记中心</h3>
                             <div className="flex items-center gap-1">
+                                {renderRefreshButton()}
                                 <button
                                     onClick={() => setIsSidebarHidden(true)}
                                     className="p-2 rounded-full hover:bg-white/10 text-white/70 hover:text-white transition"
@@ -402,6 +437,7 @@ export default function NotesPanel({
                                 </div>
                             </div>
                             <div className="flex shrink-0 items-center gap-2">
+                                {renderRefreshButton()}
                                 {activeNote && (
                                     <button
                                         onClick={() => {
@@ -489,13 +525,16 @@ export default function NotesPanel({
                                     </div>
                                 </div>
                             </div>
-                            <button
-                                onClick={() => onOpenChange?.(false)}
-                                className="p-2 rounded-full hover:bg-white/10 text-white/70 hover:text-white transition"
-                                title="关闭"
-                            >
-                                <X className="h-5 w-5" />
-                            </button>
+                            <div className="flex shrink-0 items-center gap-2">
+                                {renderRefreshButton()}
+                                <button
+                                    onClick={() => onOpenChange?.(false)}
+                                    className="p-2 rounded-full hover:bg-white/10 text-white/70 hover:text-white transition"
+                                    title="关闭"
+                                >
+                                    <X className="h-5 w-5" />
+                                </button>
+                            </div>
                         </div>
                         <div className="min-w-0 flex-1 overflow-auto p-4 sm:p-5" onWheel={(e) => e.stopPropagation()}>
                             <form onSubmit={handleTodoSubmit} className="mb-5 rounded-2xl border border-white/10 bg-white/5 p-4">

@@ -357,10 +357,7 @@ const Settings = ({
                                                 };
 
                                                 // Push to server
-                                                const result = await syncService.pushData(data);
-                                                if (result?.updatedAt && Number.isFinite(Number(result.updatedAt))) {
-                                                    localStorage.setItem('last_local_update', String(Number(result.updatedAt)));
-                                                }
+                                                await syncService.pushData(data);
                                                 showToast('Data synced successfully!', 'success');
                                             } catch (error) {
                                                 showToast(error.message, 'error');
@@ -720,7 +717,6 @@ const LoginForm = ({ onLogin, showToast, onSyncPull }) => {
                 };
                 
                 await syncService.pushData(localData);
-                localStorage.setItem('last_local_update', String(Date.now()));
                 localStorage.removeItem(SYNC_AUTO_PUSH_BLOCKED_KEY);
                 showToast('本地数据已上传到云端', 'success');
                 
