@@ -593,6 +593,15 @@ const LoginForm = ({ onLogin, showToast, onSyncPull }) => {
                (notes && JSON.parse(notes).length > 0);
     };
 
+    const getLocalSyncData = () => ({
+        shortcuts: JSON.parse(localStorage.getItem('shortcuts') || '[]'),
+        todos: JSON.parse(localStorage.getItem('todos') || '[]'),
+        notes: JSON.parse(localStorage.getItem('notes') || '[]'),
+        gridConfig: JSON.parse(localStorage.getItem('grid_config') || '{}'),
+        bgConfig: JSON.parse(localStorage.getItem('bg_config') || '{}'),
+        bgUrl: localStorage.getItem('bg_url') || ''
+    });
+
     const mergeData = async () => {
         try {
             const cloudData = await syncService.pullData();
@@ -707,14 +716,7 @@ const LoginForm = ({ onLogin, showToast, onSyncPull }) => {
         } else if (choice === 'local') {
             // User chose local data - push it to cloud
             try {
-                const localData = {
-                    shortcuts: JSON.parse(localStorage.getItem('shortcuts') || '[]'),
-                    todos: JSON.parse(localStorage.getItem('todos') || '[]'),
-                    notes: JSON.parse(localStorage.getItem('notes') || '[]'),
-                    gridConfig: JSON.parse(localStorage.getItem('grid_config') || '{}'),
-                    bgConfig: JSON.parse(localStorage.getItem('bg_config') || '{}'),
-                    bgUrl: localStorage.getItem('bg_url') || ''
-                };
+                const localData = getLocalSyncData();
                 
                 await syncService.pushData(localData);
                 localStorage.removeItem(SYNC_AUTO_PUSH_BLOCKED_KEY);
@@ -758,9 +760,10 @@ const LoginForm = ({ onLogin, showToast, onSyncPull }) => {
             
             if (isRegistering) {
                 await syncService.register(email, password);
+                await syncService.pushData(getLocalSyncData());
+                localStorage.removeItem(SYNC_AUTO_PUSH_BLOCKED_KEY);
                 showToast('账户创建成功！', 'success');
                 onLogin(email);
-                // For new accounts, always push local data first
                 return;
             } else {
                 localStorage.setItem(SYNC_AUTO_PUSH_BLOCKED_KEY, '1');
@@ -777,6 +780,7 @@ const LoginForm = ({ onLogin, showToast, onSyncPull }) => {
                     } else {
                         // Cloud has no data, use local and push
                         localStorage.setItem('last_local_update', String(Date.now()));
+                        await syncService.pushData(getLocalSyncData());
                         localStorage.removeItem(SYNC_AUTO_PUSH_BLOCKED_KEY);
                     }
                 } else {

@@ -440,7 +440,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!syncService.isLoggedIn() || isPullingRef.current) return;
+    if (!isLoggedIn || !isOnline || !syncService.isLoggedIn() || isPullingRef.current) return;
     if (localStorage.getItem(SYNC_AUTO_PUSH_BLOCKED_KEY) === '1') return;
     if (isPristineDefaultData()) return;
     const data = currentSyncDataRef.current;
@@ -469,7 +469,7 @@ function App() {
     };
     const timeoutId = setTimeout(syncData, SYNC_PUSH_DEBOUNCE_MS);
     return () => clearTimeout(timeoutId);
-  }, [shortcuts, gridConfig, bgConfig, bgUrl, todos, notes, isPristineDefaultData, hasPendingLocalChanges, markCloudVersionSynced]);
+  }, [shortcuts, gridConfig, bgConfig, bgUrl, todos, notes, isLoggedIn, isOnline, isPristineDefaultData, hasPendingLocalChanges, markCloudVersionSynced]);
 
   useEffect(() => { localStorage.setItem('todos', JSON.stringify(todos)); }, [todos]);
 
