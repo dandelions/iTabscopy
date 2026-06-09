@@ -265,9 +265,13 @@ function App() {
       setTimeout(() => { isPullingRef.current = false; }, 100);
       return updated;
     } catch (error) {
-      console.error('Failed to pull from cloud:', error);
       isPullingRef.current = false;
       if (throwOnError) throw error;
+      if (error?.isNetworkError) {
+        console.warn('Skipped cloud pull:', error.message);
+        return false;
+      }
+      console.error('Failed to pull from cloud:', error);
       return false;
     }
   }, [hasPendingLocalChanges, markCloudVersionSynced]);
@@ -464,6 +468,10 @@ function App() {
         }
         lastPushedSnapshotRef.current = snapshot;
       } catch (error) {
+        if (error?.isNetworkError) {
+          console.warn('Skipped auto-sync:', error.message);
+          return;
+        }
         console.error('Auto-sync failed:', error);
       }
     };

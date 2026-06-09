@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Edit2, Trash2, X, Pencil } from 'lucide-react';
-import { DndContext, useDroppable, TouchSensor, MouseSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { DndContext, closestCenter, rectIntersection, useDroppable, TouchSensor, MouseSensor, useSensor, useSensors } from '@dnd-kit/core';
 import {
     arrayMove,
     SortableContext,
@@ -129,6 +129,7 @@ const OutsideDroppable = ({ children, onClose, isVisible }) => {
     return (
         <div
             ref={setNodeRef}
+            data-folder-modal-outside="true"
             className={`fixed inset-0 z-[9999] flex items-center justify-center p-4 transition-all duration-300 ${isVisible ? 'bg-black/70 backdrop-blur-md opacity-100' : 'opacity-0'}`}
             onClick={onClose}
         >
@@ -140,9 +141,10 @@ const OutsideDroppable = ({ children, onClose, isVisible }) => {
 };
 
 // --- 主组件 ---
-const FolderModal = ({ isOpen, onClose, folder, onUpdate, onDeleteItem, onEditShortcut }) => {
+const FolderModal = ({ isOpen, onClose, folder, onUpdate, onDeleteItem, onMoveOut, onEditShortcut }) => {
     const [contextShortcutId, setContextShortcutId] = useState(null);
     const gridRef = useRef(null);
+    const modalRef = useRef(null);
     const folderDragStartPosRef = useRef({ x: 0, y: 0 });
     const isMobileRef = useRef(false);
 
@@ -168,11 +170,23 @@ const FolderModal = ({ isOpen, onClose, folder, onUpdate, onDeleteItem, onEditSh
         })
     );
 
+    const collisionDetectionStrategy = useCallback((args) => {
+        const overlapCollisions = rectIntersection(args);
+        if (overlapCollisions.length > 0) {
+            const innerCollisions = overlapCollisions.filter(collision => collision.id !== 'folder-modal-outside');
+            return innerCollisions.length > 0 ? innerCollisions : overlapCollisions;
+        }
+
+        const centerCollisions = closestCenter(args);
+        const innerCollisions = centerCollisions.filter(collision => collision.id !== 'folder-modal-outside');
+        return innerCollisions.length > 0 ? innerCollisions : centerCollisions;
+    }, []);
+
     const handleDragStart = (event) => {
-        if (event.active.rect.current.translated) {
+        if (event.active.rect.current.initial) {
             folderDragStartPosRef.current = {
-                x: event.active.rect.current.translated.left,
-                y: event.active.rect.current.translated.top,
+                x: event.active.rect.current.initial.left,
+                y: event.active.rect.current.initial.top,
             };
         }
     };
@@ -181,10 +195,30 @@ const FolderModal = ({ isOpen, onClose, folder, onUpdate, onDeleteItem, onEditSh
         const { active, over } = event;
         if (!over) return;
 
+        if (over.id === 'folder-modal-outside') {
+            const rect = active.rect.current.translated || active.rect.current.initial;
+            const dropPosition = rect ? {
+                x: rect.left + rect.width / 2,
+                y: rect.top + rect.height / 2,
+            } : null;
+            const modalRect = modalRef.current?.getBoundingClientRect();
+            const isInsideModal = dropPosition && modalRect &&
+                dropPosition.x >= modalRect.left &&
+                dropPosition.x <= modalRect.right &&
+                dropPosition.y >= modalRect.top &&
+                dropPosition.y <= modalRect.bottom;
+
+            if (isInsideModal) return;
+
+            onMoveOut?.(active.id, dropPosition);
+            return;
+        }
+
         // ✨ 修复问题 3：在文件夹内部，长按如果原地松手（位移极小），判定为呼出【编辑菜单】，并且支持大范围拖拽！
         if (isMobileRef.current) {
-            const currentLeft = event.over?.rect?.left || 0;
-            const currentTop = event.over?.rect?.top || 0;
+            const rect = active.rect.current.translated || active.rect.current.initial;
+            const currentLeft = rect?.left || 0;
+            const currentTop = rect?.top || 0;
             const deltaX = currentLeft - folderDragStartPosRef.current.x;
             const deltaY = currentTop - folderDragStartPosRef.current.y;
             const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
@@ -216,38 +250,43 @@ const FolderModal = ({ isOpen, onClose, folder, onUpdate, onDeleteItem, onEditSh
     if (!isOpen || !folder) return null;
 
     return (
-        <OutsideDroppable key={`folder-modal-root-${folder.id}`} onClose={onClose} isVisible={isOpen}>
-            <div className="bg-white/10 border border-white/20 rounded-3xl p-6 w-[85vw] max-w-md backdrop-blur-2xl shadow-2xl animate-in zoom-in duration-300" style={{ position: 'relative', zIndex: 10001 }}>
-                <div className="flex justify-between items-center mb-6">
-                    <div className="flex items-center gap-2">
-                        <h2 className="text-xl font-bold text-white select-none">{folder.title || '文件夹'}</h2>
-                        <button
-                            onClick={() => onEditShortcut?.(folder)}
-                            className="text-white/40 hover:text-white transition-colors p-1 hover:bg-white/10 rounded"
-                        >
-                            <Pencil size={14} />
+        <DndContext
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            sensors={sensors}
+            collisionDetection={collisionDetectionStrategy}
+        >
+            <OutsideDroppable key={`folder-modal-root-${folder.id}`} onClose={onClose} isVisible={isOpen}>
+                <div ref={modalRef} className="bg-white/10 border border-white/20 rounded-3xl p-6 w-[85vw] max-w-md backdrop-blur-2xl shadow-2xl animate-in zoom-in duration-300" style={{ position: 'relative', zIndex: 10001 }}>
+                    <div className="flex justify-between items-center mb-6">
+                        <div className="flex items-center gap-2">
+                            <h2 className="text-xl font-bold text-white select-none">{folder.title || '文件夹'}</h2>
+                            <button
+                                onClick={() => onEditShortcut?.(folder)}
+                                className="text-white/40 hover:text-white transition-colors p-1 hover:bg-white/10 rounded"
+                            >
+                                <Pencil size={14} />
+                            </button>
+                        </div>
+                        <button onClick={onClose} className="text-white/40 hover:text-white transition-colors">
+                            <X size={20} />
                         </button>
                     </div>
-                    <button onClick={onClose} className="text-white/40 hover:text-white transition-colors">
-                        <X size={20} />
-                    </button>
-                </div>
 
-                <div
-                    ref={gridRef}
-                    onWheel={handleWheel}
-                    className="grid grid-cols-4 gap-4 min-h-[140px] max-h-[50vh] overflow-y-auto p-2 -m-2 folder-modal-grid"
-                    style={{
-                        touchAction: 'pan-y',
-                        WebkitOverflowScrolling: 'touch'
-                    }}
-                >
-                    {children.length === 0 ? (
-                        <div className="col-span-4 flex items-center justify-center text-white/40 py-12">
-                            文件夹为空
-                        </div>
-                    ) : (
-                        <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd} sensors={sensors}>
+                    <div
+                        ref={gridRef}
+                        onWheel={handleWheel}
+                        className="grid grid-cols-4 gap-4 min-h-[140px] max-h-[50vh] overflow-y-auto p-2 -m-2 folder-modal-grid"
+                        style={{
+                            touchAction: 'pan-y',
+                            WebkitOverflowScrolling: 'touch'
+                        }}
+                    >
+                        {children.length === 0 ? (
+                            <div className="col-span-4 flex items-center justify-center text-white/40 py-12">
+                                文件夹为空
+                            </div>
+                        ) : (
                             <SortableContext items={children.map(s => s.id)} strategy={rectSortingStrategy}>
                                 {children.map((shortcut) => (
                                     <SortableItem
@@ -261,11 +300,11 @@ const FolderModal = ({ isOpen, onClose, folder, onUpdate, onDeleteItem, onEditSh
                                     />
                                 ))}
                             </SortableContext>
-                        </DndContext>
-                    )}
+                        )}
+                    </div>
                 </div>
-            </div>
-        </OutsideDroppable>
+            </OutsideDroppable>
+        </DndContext>
     );
 };
 

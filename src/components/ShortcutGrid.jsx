@@ -608,12 +608,25 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
 
         const findTargetIndex = () => {
             if (!position) return null;
-            const el = document.elementFromPoint(position.x, position.y);
-            const target = el?.closest?.('[data-shortcut-id]');
-            if (!target) return null;
-            const targetId = target.getAttribute('data-shortcut-id');
-            if (!targetId || targetId === openFolder.id) return null;
-            return newShortcuts.findIndex(s => s.id === targetId);
+            const overlay = document.querySelector('[data-folder-modal-outside="true"]');
+            const previousPointerEvents = overlay?.style.pointerEvents;
+
+            if (overlay) {
+                overlay.style.pointerEvents = 'none';
+            }
+
+            try {
+                const el = document.elementFromPoint(position.x, position.y);
+                const target = el?.closest?.('[data-shortcut-id]');
+                if (!target) return null;
+                const targetId = target.getAttribute('data-shortcut-id');
+                if (!targetId || targetId === openFolder.id) return null;
+                return newShortcuts.findIndex(s => s.id === targetId);
+            } finally {
+                if (overlay) {
+                    overlay.style.pointerEvents = previousPointerEvents || '';
+                }
+            }
         };
         const targetIndex = findTargetIndex();
 

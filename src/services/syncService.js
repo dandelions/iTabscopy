@@ -2,6 +2,30 @@
 const LAST_CLOUD_UPDATE_KEY = 'last_cloud_update';
 const LAST_LOCAL_UPDATE_KEY = 'last_local_update';
 const LAST_SYNCED_SNAPSHOT_KEY = 'last_synced_snapshot';
+const NETWORK_ERROR_MESSAGE = '无法连接同步服务器，请检查 Worker 地址或网络状态';
+
+const normalizeWorkerUrl = (url = '') => {
+    const trimmed = String(url).trim();
+    if (!trimmed) return '';
+    const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    return withProtocol.replace(/\/+$/, '');
+};
+
+const createNetworkError = (error, workerUrl) => {
+    const networkError = new Error(`${NETWORK_ERROR_MESSAGE}：${workerUrl}`);
+    networkError.cause = error;
+    networkError.isNetworkError = true;
+    return networkError;
+};
+
+const readResponseError = async (response, fallback) => {
+    try {
+        const error = await response.json();
+        return error.error || fallback;
+    } catch {
+        return fallback;
+    }
+};
 
 const normalizeSyncData = (data = {}) => {
     const source = data && typeof data === 'object' ? data : {};
@@ -30,7 +54,7 @@ class SyncService {
 
     // Get worker URL from localStorage
     getWorkerUrl() {
-        return localStorage.getItem('sync_worker_url') || '';
+        return normalizeWorkerUrl(localStorage.getItem('sync_worker_url') || '');
     }
 
     // Set custom worker URL
@@ -38,7 +62,7 @@ class SyncService {
         if (!url) {
             localStorage.removeItem('sync_worker_url');
         } else {
-            localStorage.setItem('sync_worker_url', url);
+            localStorage.setItem('sync_worker_url', normalizeWorkerUrl(url));
         }
     }
 
@@ -62,13 +86,22 @@ class SyncService {
         if (!url) {
             throw new Error('请在同步设置中配置 Worker 地址');
         }
+        localStorage.setItem('sync_worker_url', url);
         return url;
+    }
+
+    async requestWorker(path, options = {}) {
+        const workerUrl = this.requireWorkerUrl();
+        try {
+            return await fetch(`${workerUrl}${path}`, options);
+        } catch (error) {
+            throw createNetworkError(error, workerUrl);
+        }
     }
 
     // Register new user
     async register(email, password) {
-        const workerUrl = this.requireWorkerUrl();
-        const response = await fetch(`${workerUrl}/api/auth/register`, {
+        const response = await this.requestWorker('/api/auth/register', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -77,8 +110,7 @@ class SyncService {
         });
 
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Registration failed');
+            throw new Error(await readResponseError(response, 'Registration failed'));
         }
 
         const data = await response.json();
@@ -88,8 +120,7 @@ class SyncService {
 
     // Login user
     async login(email, password) {
-        const workerUrl = this.requireWorkerUrl();
-        const response = await fetch(`${workerUrl}/api/auth/login`, {
+        const response = await this.requestWorker('/api/auth/login', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -98,8 +129,7 @@ class SyncService {
         });
 
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Login failed');
+            throw new Error(await readResponseError(response, 'Login failed'));
         }
 
         const data = await response.json();
@@ -114,7 +144,7 @@ class SyncService {
             try {
                 const workerUrl = this.getWorkerUrl();
                 if (workerUrl) {
-                    await fetch(`${workerUrl}/api/auth/logout`, {
+                    await this.requestWorker('/api/auth/logout', {
                         method: 'POST',
                         headers: {
                             'Authorization': `Bearer ${this.token}`,
@@ -147,8 +177,7 @@ class SyncService {
             return null;
         }
 
-        const workerUrl = this.requireWorkerUrl();
-        const response = await fetch(`${workerUrl}/api/sync/pull`, {
+        const response = await this.requestWorker('/api/sync/pull', {
             method: 'GET',
             headers: {
                 'Authorization': `Bearer ${this.token}`,
@@ -160,8 +189,7 @@ class SyncService {
                 this.logout();
                 throw new Error('Session expired. Please login again.');
             }
-            const error = await response.json();
-            throw new Error(error.error || 'Pull failed');
+            throw new Error(await readResponseError(response, 'Pull failed'));
         }
 
         const result = await response.json();
@@ -189,8 +217,7 @@ class SyncService {
             updatedAt: Date.now()
         };
 
-        const workerUrl = this.requireWorkerUrl();
-        const response = await fetch(`${workerUrl}/api/sync/push`, {
+        const response = await this.requestWorker('/api/sync/push', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${this.token}`,
@@ -204,8 +231,7 @@ class SyncService {
                 this.logout();
                 throw new Error('Session expired. Please login again.');
             }
-            const error = await response.json();
-            throw new Error(error.error || 'Push failed');
+            throw new Error(await readResponseError(response, 'Push failed'));
         }
 
         const result = await response.json();
