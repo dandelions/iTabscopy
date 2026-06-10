@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Trash2, Edit2 } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Trash2, Edit2 } from 'lucide-react';
 import { useIconSource } from '../hooks/useIconSource';
 import EditShortcutModal from './EditShortcutModal';
 import FolderIcon from './FolderIcon';
@@ -63,6 +63,80 @@ const calculateGaps = (cols, rows, screenWidth, iconSize, leftOffset = 0) => {
     return { colGap, rowGap };
 };
 
+const MERGE_PREVIEW_RATIO = 0.06;
+const MERGE_CONFIRM_RATIO = 0.22;
+
+const getShortcutElement = (id) => {
+    const idString = String(id);
+    return Array.from(document.querySelectorAll('[data-shortcut-id]'))
+        .find(element => element.getAttribute('data-shortcut-id') === idString) || null;
+};
+
+const getIntersectionRatio = (a, b) => {
+    if (!a || !b) return 0;
+
+    const left = Math.max(a.left, b.left);
+    const right = Math.min(a.right, b.right);
+    const top = Math.max(a.top, b.top);
+    const bottom = Math.min(a.bottom, b.bottom);
+    const width = Math.max(0, right - left);
+    const height = Math.max(0, bottom - top);
+
+    if (width === 0 || height === 0) return 0;
+
+    const intersectionArea = width * height;
+    const aArea = Math.max(1, a.width * a.height);
+    const bArea = Math.max(1, b.width * b.height);
+    return intersectionArea / Math.min(aArea, bArea);
+};
+
+const toComparableRect = (rect) => {
+    if (!rect) return null;
+
+    return {
+        left: rect.left,
+        right: rect.right ?? rect.left + rect.width,
+        top: rect.top,
+        bottom: rect.bottom ?? rect.top + rect.height,
+        width: rect.width,
+        height: rect.height,
+    };
+};
+
+const getDragRect = (active, delta) => {
+    const initial = active?.rect?.current?.initial;
+
+    if (initial && delta) {
+        return toComparableRect({
+            left: initial.left + delta.x,
+            top: initial.top + delta.y,
+            width: initial.width,
+            height: initial.height,
+        });
+    }
+
+    return toComparableRect(active?.rect?.current?.translated || initial);
+};
+
+const getRectCenter = (rect) => {
+    if (!rect) return null;
+    return {
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2,
+    };
+};
+
+const isPointInsideRect = (point, rect, insetRatio = 0.08) => {
+    if (!point || !rect) return false;
+    const insetX = rect.width * insetRatio;
+    const insetY = rect.height * insetRatio;
+
+    return point.x >= rect.left + insetX &&
+        point.x <= rect.right - insetX &&
+        point.y >= rect.top + insetY &&
+        point.y <= rect.bottom - insetY;
+};
+
 const RegularShortcutIcon = ({ shortcut }) => {
     const iconSrc = useIconSource(shortcut);
     const iconRef = useRef(null);
@@ -123,23 +197,26 @@ const RegularShortcutIcon = ({ shortcut }) => {
     );
 };
 
-const ShortcutIcon = ({ shortcut, iconSize, isContextOpen, onRemove, onEdit, setContextShortcutId }) => {
-    if (shortcut.type === 'folder') {
-        return <FolderIcon folder={shortcut} iconSize={iconSize} />;
-    }
-
+const ShortcutIcon = ({ shortcut, iconSize, isContextOpen, isEditMode = false, onRemove, onEdit, setContextShortcutId }) => {
     return (
         <div
             className="relative"
             style={{ width: `${iconSize}px`, height: `${iconSize}px` }}
         >
-            <RegularShortcutIcon shortcut={shortcut} />
+            {shortcut.type === 'folder' ? (
+                <FolderIcon folder={shortcut} iconSize={iconSize} />
+            ) : (
+                <RegularShortcutIcon shortcut={shortcut} />
+            )}
 
             {isContextOpen && (
                 <>
-                    <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px] pointer-events-none rounded-[22px]" />
+                    {!isEditMode && (
+                        <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px] pointer-events-none rounded-[22px]" />
+                    )}
                     <button
                         type="button"
+                        data-context-menu="true"
                         className="absolute -top-2 -right-2 p-2 rounded-full bg-red-500 text-white shadow-lg hover:bg-red-400 transition z-20"
                         onPointerDown={(e) => e.stopPropagation()}
                         onClick={(e) => {
@@ -150,20 +227,22 @@ const ShortcutIcon = ({ shortcut, iconSize, isContextOpen, onRemove, onEdit, set
                     >
                         <Trash2 className="h-4 w-4" />
                     </button>
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <button
-                            type="button"
-                            className="w-full h-full rounded-[22px] bg-black/40 border border-white/20 text-white hover:text-blue-200 backdrop-blur-sm pointer-events-auto flex items-center justify-center transition"
-                            onPointerDown={(e) => e.stopPropagation()}
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                onEdit?.(shortcut);
-                                setContextShortcutId?.(null);
-                            }}
-                        >
-                            <Edit2 className="h-6 w-6 drop-shadow-lg" />
-                        </button>
-                    </div>
+                    <button
+                        type="button"
+                        data-context-menu="true"
+                        className={isEditMode
+                            ? 'absolute -bottom-2 -right-2 p-2 rounded-full bg-blue-500 text-white shadow-lg hover:bg-blue-400 transition z-20'
+                            : 'absolute inset-0 rounded-[22px] bg-black/40 border border-white/20 text-white hover:text-blue-200 backdrop-blur-sm flex items-center justify-center transition z-10'
+                        }
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onEdit?.(shortcut);
+                            setContextShortcutId?.(null);
+                        }}
+                    >
+                        <Edit2 className={`${isEditMode ? 'h-4 w-4' : 'h-6 w-6'} drop-shadow-lg`} />
+                    </button>
                 </>
             )}
         </div>
@@ -215,7 +294,10 @@ const SortableShortcutItem = ({
                                   onRemoveShortcut,
                                   setEditingShortcut,
                                   onOpenFolder,
-                                  isMergeTarget
+                                  isMergeTarget,
+                                  isDropCandidate,
+                                  isEditing,
+                                  setIsEditing
                               }) => {
     const {
         attributes,
@@ -233,14 +315,22 @@ const SortableShortcutItem = ({
         opacity: isDragging ? 0 : 1,
     };
 
+    const isDraggingRef = useRef(false);
+
+    useEffect(() => {
+        isDraggingRef.current = isDragging;
+    }, [isDragging]);
+
     const longPressEvents = useLongPress(() => {
+        if (isDraggingRef.current) return;
+        setIsEditing(true);
         setContextShortcutId(shortcut.id);
     }, {
-        delay: 300
+        delay: 420
     });
 
-    const isContextOpen = contextShortcutId === shortcut.id;
-    const dndListeners = isContextOpen ? {} : listeners;
+    const isContextOpen = isEditing || contextShortcutId === shortcut.id;
+    const dndListeners = isContextOpen && !isEditing ? {} : listeners;
 
     const itemWidth = iconSize + 24;
 
@@ -251,8 +341,9 @@ const SortableShortcutItem = ({
             style={{ ...style, width: `${itemWidth}px`, touchAction: isContextOpen ? 'pan-y' : 'none' }}
             {...attributes}
             {...dndListeners}
-            {...longPressEvents}
-            className={`sortable-item ${isDragging ? 'data-dragging="true"' : ''}`}
+            {...(isEditing ? {} : longPressEvents)}
+            data-dragging={isDragging ? 'true' : undefined}
+            className="sortable-item"
             onClick={(e) => {
                 if (isDragging) {
                     e.stopPropagation();
@@ -279,6 +370,7 @@ const SortableShortcutItem = ({
             onContextMenu={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
+                setIsEditing(true);
                 setContextShortcutId(shortcut.id);
             }}
             tabIndex={0}
@@ -293,7 +385,7 @@ const SortableShortcutItem = ({
                 }
             }}
         >
-            <div className="relative flex justify-center">
+            <div className={`relative flex justify-center ${isEditing && !isDragging ? 'animate-jiggle' : ''}`}>
                 <ShortcutIcon
                     shortcut={shortcut}
                     iconSize={iconSize}
@@ -301,11 +393,18 @@ const SortableShortcutItem = ({
                     onRemove={onRemoveShortcut}
                     onEdit={setEditingShortcut}
                     setContextShortcutId={setContextShortcutId}
+                    isEditMode={isEditing}
                 />
                 {isMergeTarget && (
                     <div
                         className="absolute -inset-2 border-2 border-dashed border-blue-400 rounded-[28px] pointer-events-none animate-pulse bg-blue-500/10 z-50"
                         style={{ zIndex: 60 }}
+                    />
+                )}
+                {isDropCandidate && !isMergeTarget && (
+                    <div
+                        className="absolute -inset-2 border border-white/45 rounded-[28px] pointer-events-none bg-white/5 z-40"
+                        style={{ zIndex: 55 }}
                     />
                 )}
             </div>
@@ -319,18 +418,16 @@ const SortableShortcutItem = ({
 const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onReorder, leftOffset = 0 }) => {
     const { cols = 5, rows = 3, iconSize = 96 } = config || {};
     const [currentPage, setCurrentPage] = useState(0);
+    const [isEditing, setIsEditing] = useState(false);
     const [contextShortcutId, setContextShortcutId] = useState(null);
     const [editingShortcut, setEditingShortcut] = useState(null);
     const [responsiveCols, setResponsiveCols] = useState(cols);
     const [activeId, setActiveId] = useState(null);
     const [openFolder, setOpenFolder] = useState(null);
     const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
+    const [dropCandidateId, setDropCandidateId] = useState(null);
     const [mergeTargetId, setMergeTargetId] = useState(null);
-    const mergeTimerRef = useRef(null);
-    const dragOutTimerRef = useRef(null);
-    const lastOverIdRef = useRef(null);
-    const lastOverIndexRef = useRef(null);
-    const lastCollisionTypeRef = useRef(null);
+    const mergeTargetIdRef = useRef(null);
 
     const containerRef = useRef(null);
     const accumulatedRef = useRef(0);
@@ -345,10 +442,8 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
     const collisionDetectionStrategy = useCallback((args) => {
         const overlapCollisions = rectIntersection(args);
         if (overlapCollisions.length > 0) {
-            lastCollisionTypeRef.current = 'overlap';
             return overlapCollisions;
         }
-        lastCollisionTypeRef.current = 'proximity';
         return closestCenter(args);
     }, []);
 
@@ -374,129 +469,68 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
         return null;
     }, [shortcuts]);
 
+    const getMergeState = useCallback((active, over, delta) => {
+        if (!active || !over || active.id === over.id) {
+            return { dropCandidateId: null, mergeTargetId: null };
+        }
+
+        const activeShortcut = shortcuts.find(s => s.id === active.id);
+        const overShortcut = shortcuts.find(s => s.id === over.id);
+
+        if (!activeShortcut || !overShortcut || activeShortcut.type === 'folder') {
+            return { dropCandidateId: null, mergeTargetId: null };
+        }
+
+        const activeRect = getDragRect(active, delta);
+        const overRect = toComparableRect(over.rect) || toComparableRect(getShortcutElement(over.id)?.getBoundingClientRect());
+        const ratio = getIntersectionRatio(activeRect, overRect);
+        const activeCenter = getRectCenter(activeRect);
+        const isCenteredOnTarget = isPointInsideRect(activeCenter, overRect);
+
+        if (ratio < MERGE_PREVIEW_RATIO && !isCenteredOnTarget) {
+            return { dropCandidateId: null, mergeTargetId: null };
+        }
+
+        return {
+            dropCandidateId: over.id,
+            mergeTargetId: ratio >= MERGE_CONFIRM_RATIO || isCenteredOnTarget ? over.id : null,
+        };
+    }, [shortcuts]);
+
+    const resetMergeState = useCallback(() => {
+        setDropCandidateId(null);
+        setMergeTargetId(null);
+        mergeTargetIdRef.current = null;
+    }, []);
+
     const handleDragStart = (event) => {
         setActiveId(event.active.id);
+        setContextShortcutId(null);
     };
 
     const handleDragOver = (event) => {
         const { active, over } = event;
 
-        const activeNode = findShortcut(active.id);
-        if (activeNode && activeNode.container !== 'root') {
-            if (over && over.id === 'folder-modal-outside') {
-                if (!dragOutTimerRef.current) {
-                    dragOutTimerRef.current = setTimeout(() => {
-                        const folderId = activeNode.container;
-                        const folder = activeNode.parent;
-                        const item = activeNode.shortcut;
-
-                        const newChildren = folder.children.filter(c => c.id !== item.id);
-                        const updatedFolder = { ...folder, children: newChildren };
-
-                        const folderIndex = shortcuts.findIndex(s => s.id === folderId);
-                        const newShortcuts = [...shortcuts];
-
-                        if (newChildren.length === 0) {
-                            newShortcuts.splice(folderIndex, 1, item);
-                            setOpenFolder(null);
-                            setIsFolderModalOpen(false);
-                        } else {
-                            newShortcuts[folderIndex] = updatedFolder;
-                            newShortcuts.splice(folderIndex + 1, 0, item);
-                            setOpenFolder(updatedFolder);
-                            setIsFolderModalOpen(false);
-                        }
-
-                        if (onReorder) onReorder(newShortcuts);
-                        dragOutTimerRef.current = null;
-                    }, 400);
-                }
-                return;
-            } else {
-                if (dragOutTimerRef.current) {
-                    clearTimeout(dragOutTimerRef.current);
-                    dragOutTimerRef.current = null;
-                }
-            }
-        }
-
         if (!over || active.id === over.id) {
-            if (mergeTimerRef.current) {
-                clearTimeout(mergeTimerRef.current);
-                mergeTimerRef.current = null;
-            }
-            setMergeTargetId(null);
-            lastOverIdRef.current = null;
-            lastOverIndexRef.current = null;
+            resetMergeState();
             return;
         }
 
-        const currentIndex = over.data?.current?.sortable?.index ?? null;
-
-        if (lastOverIdRef.current === over.id) {
-            if (lastCollisionTypeRef.current !== 'overlap') {
-                if (mergeTimerRef.current) {
-                    clearTimeout(mergeTimerRef.current);
-                    mergeTimerRef.current = null;
-                }
-                setMergeTargetId(null);
-                return;
-            }
-
-            if (lastOverIndexRef.current !== null && currentIndex !== lastOverIndexRef.current) {
-                if (mergeTimerRef.current) {
-                    clearTimeout(mergeTimerRef.current);
-                    mergeTimerRef.current = null;
-                }
-                setMergeTargetId(null);
-            }
-            lastOverIndexRef.current = currentIndex;
-            return;
-        }
-
-        lastOverIdRef.current = over.id;
-        lastOverIndexRef.current = currentIndex;
-
-        if (mergeTimerRef.current) {
-            clearTimeout(mergeTimerRef.current);
-            mergeTimerRef.current = null;
-        }
-
-        setMergeTargetId(null);
-
-        const activeShortcut = shortcuts.find(s => s.id === active.id);
-        const overShortcut = shortcuts.find(s => s.id === over.id);
-
-        if (!activeShortcut || !overShortcut) return;
-        if (activeShortcut.type === 'folder') return;
-
-        const isOverFolder = overShortcut.type === 'folder';
-        const isOverItem = activeShortcut.type !== 'folder' && overShortcut.type !== 'folder';
-
-        if ((isOverFolder || isOverItem) && lastCollisionTypeRef.current === 'overlap') {
-            mergeTimerRef.current = setTimeout(() => {
-                setMergeTargetId(over.id);
-            }, 600);
-        }
+        const nextMergeState = getMergeState(active, over, event.delta);
+        setDropCandidateId(nextMergeState.dropCandidateId);
+        setMergeTargetId(nextMergeState.mergeTargetId);
+        mergeTargetIdRef.current = nextMergeState.mergeTargetId;
     };
 
     const handleDragEnd = (event) => {
         const { active, over } = event;
 
-        if (mergeTimerRef.current) {
-            clearTimeout(mergeTimerRef.current);
-            mergeTimerRef.current = null;
-        }
-
-        if (dragOutTimerRef.current) {
-            clearTimeout(dragOutTimerRef.current);
-            dragOutTimerRef.current = null;
-        }
-
         setActiveId(null);
 
-        const isMergeAction = mergeTargetId && over && mergeTargetId === over.id;
-        setMergeTargetId(null);
+        const finalMergeState = getMergeState(active, over, event.delta);
+        const finalMergeTargetId = finalMergeState.mergeTargetId || mergeTargetIdRef.current;
+        const isMergeAction = finalMergeTargetId && over && finalMergeTargetId === over.id;
+        resetMergeState();
 
         if (!over) return;
 
@@ -522,7 +556,7 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
 
             if (activeShortcut && overShortcut && activeShortcut.type !== 'folder' && overShortcut.type !== 'folder') {
                 const newFolder = {
-                    id: `folder-${Date.now()}`,
+                    id: `folder-${overShortcut.id}-${activeShortcut.id}`,
                     title: 'Folder',
                     type: 'folder',
                     children: [overShortcut, activeShortcut]
@@ -584,12 +618,7 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
             children: (openFolder.children || []).filter(item => item.id !== itemId)
         };
 
-        const newShortcuts = shortcuts.map(shortcut =>
-            shortcut.id === openFolder.id ? updatedFolder : shortcut
-        );
-
-        if (onReorder) onReorder(newShortcuts);
-        setOpenFolder(updatedFolder);
+        handleFolderUpdate(updatedFolder);
     };
 
     const handleFolderItemMoveOut = (itemId, position) => {
@@ -602,11 +631,9 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
             ...openFolder,
             children: openFolder.children.filter(i => i.id !== itemId)
         };
-        const folderIndex = shortcuts.findIndex(s => s.id === openFolder.id);
-        const newShortcuts = [...shortcuts];
-        const hasChildren = updatedFolder.children.length > 0;
+        const sourceHasChildren = updatedFolder.children.length > 0;
 
-        const findTargetIndex = () => {
+        const findTargetShortcut = () => {
             if (!position) return null;
             const overlay = document.querySelector('[data-folder-modal-outside="true"]');
             const previousPointerEvents = overlay?.style.pointerEvents;
@@ -620,31 +647,71 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
                 const target = el?.closest?.('[data-shortcut-id]');
                 if (!target) return null;
                 const targetId = target.getAttribute('data-shortcut-id');
-                if (!targetId || targetId === openFolder.id) return null;
-                return newShortcuts.findIndex(s => s.id === targetId);
+                if (!targetId || targetId === String(openFolder.id)) return null;
+                return shortcuts.find(s => String(s.id) === targetId) || null;
             } finally {
                 if (overlay) {
                     overlay.style.pointerEvents = previousPointerEvents || '';
                 }
             }
         };
-        const targetIndex = findTargetIndex();
+        const targetShortcut = findTargetShortcut();
 
-        if (hasChildren) {
-            newShortcuts[folderIndex] = updatedFolder;
-            if (targetIndex != null && targetIndex !== -1) {
-                const insertIndex = targetIndex >= folderIndex ? targetIndex + 1 : targetIndex;
-                newShortcuts.splice(insertIndex, 0, itemToMove);
-            } else {
+        if (targetShortcut?.type === 'folder') {
+            const newShortcuts = shortcuts.flatMap(shortcut => {
+                if (shortcut.id === openFolder.id) {
+                    return sourceHasChildren ? [updatedFolder] : [];
+                }
+
+                if (shortcut.id === targetShortcut.id) {
+                    return [{ ...shortcut, children: [...(shortcut.children || []), itemToMove] }];
+                }
+
+                return [shortcut];
+            });
+
+            if (onReorder) onReorder(newShortcuts);
+        } else if (targetShortcut) {
+            const newFolder = {
+                id: `folder-${targetShortcut.id}-${itemToMove.id}`,
+                title: 'Folder',
+                type: 'folder',
+                children: [targetShortcut, itemToMove]
+            };
+
+            const newShortcuts = shortcuts.flatMap(shortcut => {
+                if (shortcut.id === openFolder.id) {
+                    return sourceHasChildren ? [updatedFolder] : [];
+                }
+
+                if (shortcut.id === targetShortcut.id) {
+                    return [newFolder];
+                }
+
+                return [shortcut];
+            });
+
+            if (onReorder) onReorder(newShortcuts);
+        } else {
+            const folderIndex = shortcuts.findIndex(s => s.id === openFolder.id);
+            const newShortcuts = [...shortcuts];
+
+            if (sourceHasChildren) {
+                newShortcuts[folderIndex] = updatedFolder;
                 newShortcuts.splice(folderIndex + 1, 0, itemToMove);
+            } else {
+                newShortcuts.splice(folderIndex, 1, itemToMove);
             }
+
+            if (onReorder) onReorder(newShortcuts);
+        }
+
+        if (sourceHasChildren) {
             setOpenFolder(updatedFolder);
         } else {
-            newShortcuts.splice(folderIndex, 1, itemToMove);
             setOpenFolder(null);
         }
 
-        if (onReorder) onReorder(newShortcuts);
         setIsFolderModalOpen(false);
     };
 
@@ -697,17 +764,29 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
     const renderPage = totalPages > 0 ? Math.min(currentPage, totalPages - 1) : 0;
 
     useEffect(() => {
-        if (contextShortcutId && !shortcuts.some(s => s.id === contextShortcutId)) {
-            setContextShortcutId(null);
-        }
+        if (!contextShortcutId || shortcuts.some(s => s.id === contextShortcutId)) return undefined;
+        const timer = setTimeout(() => setContextShortcutId(null), 0);
+        return () => clearTimeout(timer);
     }, [contextShortcutId, shortcuts]);
 
     useEffect(() => {
-        if (!contextShortcutId) return;
+        if (!contextShortcutId || isEditing) return;
         const handleClickAway = () => setContextShortcutId(null);
         document.addEventListener('click', handleClickAway);
         return () => document.removeEventListener('click', handleClickAway);
-    }, [contextShortcutId]);
+    }, [contextShortcutId, isEditing]);
+
+    useEffect(() => {
+        if (!isEditing) return;
+        const handleKeyDown = (e) => {
+            if (e.key === 'Escape') {
+                setIsEditing(false);
+                setContextShortcutId(null);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isEditing]);
 
     const goToPage = useCallback((targetPage) => {
         const clampedPage = Math.max(0, Math.min(totalPages - 1, targetPage));
@@ -789,6 +868,10 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
             onDragStart={handleDragStart}
             onDragOver={handleDragOver}
             onDragEnd={handleDragEnd}
+            onDragCancel={() => {
+                setActiveId(null);
+                resetMergeState();
+            }}
         >
             <div
                 ref={containerRef}
@@ -831,6 +914,9 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
                                             onRemoveShortcut={onRemoveShortcut}
                                             setEditingShortcut={setEditingShortcut}
                                             onOpenFolder={handleOpenFolder}
+                                            isEditing={isEditing}
+                                            setIsEditing={setIsEditing}
+                                            isDropCandidate={dropCandidateId === shortcut.id}
                                             isMergeTarget={mergeTargetId === shortcut.id}
                                         />
                                     ))}
@@ -849,6 +935,7 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
                                 shortcut={activeNodeShortcut}
                                 iconSize={iconSize}
                                 isContextOpen={false}
+                                isEditMode={false}
                             />
                             <span className="text-sm font-medium text-white/90 drop-shadow-md truncate w-full text-center px-1 select-none">
                                  {activeNodeShortcut.title}
@@ -857,6 +944,20 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
                     </div>
                 ) : null}
             </DragOverlay>
+
+            {isEditing && (
+                <button
+                    type="button"
+                    title="完成"
+                    className="fixed bottom-8 left-6 z-40 h-11 w-11 rounded-full liquid-glass-fixed text-white flex items-center justify-center hover:scale-105 active:scale-95 transition"
+                    onClick={() => {
+                        setIsEditing(false);
+                        setContextShortcutId(null);
+                    }}
+                >
+                    <Check className="h-5 w-5" />
+                </button>
+            )}
 
             {totalPages > 1 && (
                 <div className="fixed bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-4 liquid-glass-fixed rounded-full px-4 py-2">

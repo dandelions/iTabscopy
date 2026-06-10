@@ -41,6 +41,20 @@ const normalizeSyncData = (data = {}) => {
 
 const createSyncSnapshot = (data) => JSON.stringify(normalizeSyncData(data));
 
+const readStoredTimestamp = (key) => {
+    const raw = localStorage.getItem(key);
+    if (raw === null) return null;
+    const numeric = Number(raw);
+    if (Number.isFinite(numeric)) return numeric;
+    const parsed = Date.parse(raw);
+    if (Number.isFinite(parsed)) {
+        localStorage.setItem(key, String(parsed));
+        return parsed;
+    }
+    localStorage.removeItem(key);
+    return null;
+};
+
 class SyncService {
     constructor() {
         this.token = localStorage.getItem('sync_token');
@@ -212,9 +226,11 @@ class SyncService {
             return null;
         }
 
+        const baseUpdatedAt = readStoredTimestamp(LAST_CLOUD_UPDATE_KEY) || readStoredTimestamp(LAST_LOCAL_UPDATE_KEY);
         const syncData = {
             ...data,
-            updatedAt: Date.now()
+            updatedAt: Date.now(),
+            baseUpdatedAt: baseUpdatedAt || null,
         };
 
         const response = await this.requestWorker('/api/sync/push', {

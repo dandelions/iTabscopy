@@ -144,7 +144,44 @@ async function handlePull(request, env, corsHeaders) {
 async function handlePush(request, env, corsHeaders) {
     const email = await verifyToken(request, env);
     const data = await request.json();
-    const syncData = { ...data, updatedAt: data.updatedAt || Date.now() };
+    const existingData = await env.NewTab_KV.get(`sync:${email}`);
+    const existing = existingData ? JSON.parse(existingData) : null;
+    const existingUpdatedAt = Number(existing?.updatedAt);
+    const hasExistingData = Boolean(existing);
+    const hasExistingTimestamp = Number.isFinite(existingUpdatedAt);
+    const incomingUpdatedAt = Number(data.updatedAt);
+    const incomingBaseUpdatedAt = Number(data.baseUpdatedAt);
+    const hasIncomingTimestamp = Number.isFinite(incomingUpdatedAt);
+    const hasIncomingBaseTimestamp = Number.isFinite(incomingBaseUpdatedAt);
+
+    if (hasExistingData && !hasIncomingTimestamp) {
+        return jsonResponse({
+            error: 'Conflict: refusing timestamp-less sync push over existing cloud data',
+            code: 'SYNC_CONFLICT_MISSING_TIMESTAMP',
+            currentUpdatedAt: hasExistingTimestamp ? existingUpdatedAt : null,
+        }, 409, corsHeaders);
+    }
+
+    if (hasExistingTimestamp) {
+        if (hasIncomingBaseTimestamp && incomingBaseUpdatedAt < existingUpdatedAt) {
+            return jsonResponse({
+                error: 'Conflict: cloud data is newer than the client base version',
+                code: 'SYNC_CONFLICT_STALE_BASE',
+                currentUpdatedAt: existingUpdatedAt,
+            }, 409, corsHeaders);
+        }
+
+        if (!hasIncomingBaseTimestamp && incomingUpdatedAt < existingUpdatedAt) {
+            return jsonResponse({
+                error: 'Conflict: cloud data is newer than the incoming payload',
+                code: 'SYNC_CONFLICT_STALE_PAYLOAD',
+                currentUpdatedAt: existingUpdatedAt,
+            }, 409, corsHeaders);
+        }
+    }
+
+    const syncData = { ...data, updatedAt: hasIncomingTimestamp ? incomingUpdatedAt : Date.now() };
+    delete syncData.baseUpdatedAt;
     await env.NewTab_KV.put(`sync:${email}`, JSON.stringify(syncData));
     return jsonResponse({ success: true, updatedAt: syncData.updatedAt }, 200, corsHeaders);
 }

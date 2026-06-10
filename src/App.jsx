@@ -127,10 +127,15 @@ function App() {
   const isPullingRef = useRef(false);
   const lastPushedSnapshotRef = useRef('');
   const currentSyncDataRef = useRef(null);
+  const hasCompletedInitialPullRef = useRef(!syncService.isLoggedIn());
 
   useEffect(() => {
     currentSyncDataRef.current = { shortcuts, gridConfig, bgConfig, bgUrl, todos, notes };
   }, [shortcuts, gridConfig, bgConfig, bgUrl, todos, notes]);
+
+  useEffect(() => {
+    hasCompletedInitialPullRef.current = !isLoggedIn;
+  }, [isLoggedIn]);
 
   const isPristineDefaultData = useCallback(() => {
     const hasLocalUpdate = localStorage.getItem('last_local_update') !== null;
@@ -196,11 +201,13 @@ function App() {
   const pullFromCloud = useCallback(async (options = {}) => {
     const { forceApply = false, throwOnError = false } = options;
     if (!syncService.isLoggedIn()) return false;
+    if (!syncService.isOnline()) return false;
 
     try {
       isPullingRef.current = true;
       const cloudData = await syncService.pullData();
       if (!cloudData) {
+        hasCompletedInitialPullRef.current = true;
         isPullingRef.current = false;
         return false;
       }
@@ -263,6 +270,7 @@ function App() {
       }
 
       setTimeout(() => { isPullingRef.current = false; }, 100);
+      hasCompletedInitialPullRef.current = true;
       return updated;
     } catch (error) {
       isPullingRef.current = false;
@@ -445,6 +453,7 @@ function App() {
 
   useEffect(() => {
     if (!isLoggedIn || !isOnline || !syncService.isLoggedIn() || isPullingRef.current) return;
+    if (!hasCompletedInitialPullRef.current) return;
     if (localStorage.getItem(SYNC_AUTO_PUSH_BLOCKED_KEY) === '1') return;
     if (isPristineDefaultData()) return;
     const data = currentSyncDataRef.current;

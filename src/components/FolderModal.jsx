@@ -183,6 +183,7 @@ const FolderModal = ({ isOpen, onClose, folder, onUpdate, onDeleteItem, onMoveOu
     }, []);
 
     const handleDragStart = (event) => {
+        setContextShortcutId(null);
         if (event.active.rect.current.initial) {
             folderDragStartPosRef.current = {
                 x: event.active.rect.current.initial.left,
@@ -193,30 +194,27 @@ const FolderModal = ({ isOpen, onClose, folder, onUpdate, onDeleteItem, onMoveOu
 
     const handleDragEnd = (event) => {
         const { active, over } = event;
-        if (!over) return;
+        const rect = active.rect.current.translated || active.rect.current.initial;
+        const dropPosition = rect ? {
+            x: rect.left + rect.width / 2,
+            y: rect.top + rect.height / 2,
+        } : null;
+        const modalRect = modalRef.current?.getBoundingClientRect();
+        const isInsideModal = dropPosition && modalRect &&
+            dropPosition.x >= modalRect.left &&
+            dropPosition.x <= modalRect.right &&
+            dropPosition.y >= modalRect.top &&
+            dropPosition.y <= modalRect.bottom;
 
-        if (over.id === 'folder-modal-outside') {
-            const rect = active.rect.current.translated || active.rect.current.initial;
-            const dropPosition = rect ? {
-                x: rect.left + rect.width / 2,
-                y: rect.top + rect.height / 2,
-            } : null;
-            const modalRect = modalRef.current?.getBoundingClientRect();
-            const isInsideModal = dropPosition && modalRect &&
-                dropPosition.x >= modalRect.left &&
-                dropPosition.x <= modalRect.right &&
-                dropPosition.y >= modalRect.top &&
-                dropPosition.y <= modalRect.bottom;
-
-            if (isInsideModal) return;
-
+        if (dropPosition && !isInsideModal) {
             onMoveOut?.(active.id, dropPosition);
             return;
         }
 
+        if (!over || over.id === 'folder-modal-outside') return;
+
         // ✨ 修复问题 3：在文件夹内部，长按如果原地松手（位移极小），判定为呼出【编辑菜单】，并且支持大范围拖拽！
         if (isMobileRef.current) {
-            const rect = active.rect.current.translated || active.rect.current.initial;
             const currentLeft = rect?.left || 0;
             const currentTop = rect?.top || 0;
             const deltaX = currentLeft - folderDragStartPosRef.current.x;
@@ -253,6 +251,7 @@ const FolderModal = ({ isOpen, onClose, folder, onUpdate, onDeleteItem, onMoveOu
         <DndContext
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
+            onDragCancel={() => setContextShortcutId(null)}
             sensors={sensors}
             collisionDetection={collisionDetectionStrategy}
         >
