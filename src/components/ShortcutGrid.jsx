@@ -253,12 +253,11 @@ const useLongPress = (callback = () => {}, { delay = 300, moveThreshold = 10 } =
     const timeoutRef = useRef(null);
     const startPosRef = useRef({ x: 0, y: 0 });
 
-    const handlePointerDown = useCallback((e) => {
-        startPosRef.current = { x: e.clientX, y: e.clientY };
-        timeoutRef.current = setTimeout(() => {
-            callback(e);
-        }, delay);
-    }, [callback, delay]);
+    const getEventPoint = (e) => {
+        if (e.touches?.[0]) return e.touches[0];
+        if (e.changedTouches?.[0]) return e.changedTouches[0];
+        return e;
+    };
 
     const clearTimer = useCallback(() => {
         if (timeoutRef.current) {
@@ -267,11 +266,21 @@ const useLongPress = (callback = () => {}, { delay = 300, moveThreshold = 10 } =
         }
     }, []);
 
+    const handlePointerDown = useCallback((e) => {
+        const point = getEventPoint(e);
+        clearTimer();
+        startPosRef.current = { x: point.clientX, y: point.clientY };
+        timeoutRef.current = setTimeout(() => {
+            callback(e);
+        }, delay);
+    }, [callback, clearTimer, delay]);
+
     const handlePointerMove = useCallback((e) => {
         if (!timeoutRef.current) return;
 
-        const dx = Math.abs(e.clientX - startPosRef.current.x);
-        const dy = Math.abs(e.clientY - startPosRef.current.y);
+        const point = getEventPoint(e);
+        const dx = Math.abs(point.clientX - startPosRef.current.x);
+        const dy = Math.abs(point.clientY - startPosRef.current.y);
 
         if (dx > moveThreshold || dy > moveThreshold) {
             clearTimer();
@@ -283,6 +292,10 @@ const useLongPress = (callback = () => {}, { delay = 300, moveThreshold = 10 } =
         onPointerUp: clearTimer,
         onPointerLeave: clearTimer,
         onPointerMove: handlePointerMove,
+        onTouchStartCapture: handlePointerDown,
+        onTouchEndCapture: clearTimer,
+        onTouchCancelCapture: clearTimer,
+        onTouchMoveCapture: handlePointerMove,
     };
 };
 
@@ -315,14 +328,7 @@ const SortableShortcutItem = ({
         opacity: isDragging ? 0 : 1,
     };
 
-    const isDraggingRef = useRef(false);
-
-    useEffect(() => {
-        isDraggingRef.current = isDragging;
-    }, [isDragging]);
-
     const longPressEvents = useLongPress(() => {
-        if (isDraggingRef.current) return;
         setIsEditing(true);
         setContextShortcutId(shortcut.id);
     }, {
@@ -428,6 +434,8 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
     const [dropCandidateId, setDropCandidateId] = useState(null);
     const [mergeTargetId, setMergeTargetId] = useState(null);
     const mergeTargetIdRef = useRef(null);
+    const dragStartPosRef = useRef({ x: 0, y: 0 });
+    const isTouchDragRef = useRef(false);
 
     const containerRef = useRef(null);
     const accumulatedRef = useRef(0);
@@ -506,6 +514,11 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
     const handleDragStart = (event) => {
         setActiveId(event.active.id);
         setContextShortcutId(null);
+        const initial = event.active.rect.current.initial;
+        if (initial) {
+            dragStartPosRef.current = { x: initial.left, y: initial.top };
+        }
+        isTouchDragRef.current = event.activatorEvent?.type?.startsWith('touch') || window.innerWidth <= 768;
     };
 
     const handleDragOver = (event) => {
@@ -527,10 +540,23 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
 
         setActiveId(null);
 
+        const activeRect = active.rect.current.translated || active.rect.current.initial;
+        const deltaX = (activeRect?.left || 0) - dragStartPosRef.current.x;
+        const deltaY = (activeRect?.top || 0) - dragStartPosRef.current.y;
+        const dragDistance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+        const isStationaryTouchPress = isTouchDragRef.current && dragDistance < 15;
+
         const finalMergeState = getMergeState(active, over, event.delta);
         const finalMergeTargetId = finalMergeState.mergeTargetId || mergeTargetIdRef.current;
         const isMergeAction = finalMergeTargetId && over && finalMergeTargetId === over.id;
         resetMergeState();
+        isTouchDragRef.current = false;
+
+        if (isStationaryTouchPress) {
+            setIsEditing(true);
+            setContextShortcutId(active.id);
+            return;
+        }
 
         if (!over) return;
 
@@ -871,6 +897,7 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
             onDragCancel={() => {
                 setActiveId(null);
                 resetMergeState();
+                isTouchDragRef.current = false;
             }}
         >
             <div
