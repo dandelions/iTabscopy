@@ -151,8 +151,8 @@ async function handlePush(request, env, corsHeaders) {
     const hasExistingTimestamp = Number.isFinite(existingUpdatedAt);
     const incomingUpdatedAt = Number(data.updatedAt);
     const incomingBaseUpdatedAt = Number(data.baseUpdatedAt);
-    const hasIncomingTimestamp = Number.isFinite(incomingUpdatedAt);
-    const hasIncomingBaseTimestamp = Number.isFinite(incomingBaseUpdatedAt);
+    const hasIncomingTimestamp = data.updatedAt !== null && data.updatedAt !== undefined && Number.isFinite(incomingUpdatedAt);
+    const hasIncomingBaseTimestamp = data.baseUpdatedAt !== null && data.baseUpdatedAt !== undefined && Number.isFinite(incomingBaseUpdatedAt);
 
     if (hasExistingData && !hasIncomingTimestamp) {
         return jsonResponse({

@@ -39,6 +39,7 @@ const Settings = ({
     notes,
     bgUrl,
     onSyncPull,
+    onSyncPush,
     triggerTab,
     onOpenChange
 }) => {
@@ -338,6 +339,7 @@ const Settings = ({
                                         }}
                                         showToast={showToast}
                                         onSyncPull={onSyncPull}
+                                        onSyncPush={onSyncPush}
                                     />
                                 ) : (
                                     <SyncPanel
@@ -356,9 +358,13 @@ const Settings = ({
                                                     bgUrl: bgUrl || localStorage.getItem('bg_url') || ''
                                                 };
 
-                                                // Push to server
-                                                await syncService.pushData(data);
-                                                showToast('Data synced successfully!', 'success');
+                                                if (onSyncPush) {
+                                                    await onSyncPush(data, { force: true });
+                                                } else {
+                                                    await syncService.pushData(data, { force: true });
+                                                    localStorage.removeItem(SYNC_AUTO_PUSH_BLOCKED_KEY);
+                                                }
+                                                showToast('本地数据已同步到云端', 'success');
                                             } catch (error) {
                                                 showToast(error.message, 'error');
                                             } finally {
@@ -573,7 +579,7 @@ const AddShortcutForm = ({ onAddShortcut, showToast }) => {
 };
 
 // Login Form Component
-const LoginForm = ({ onLogin, showToast, onSyncPull }) => {
+const LoginForm = ({ onLogin, showToast, onSyncPull, onSyncPush }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [workerUrl, setWorkerUrl] = useState(syncService.getWorkerUrl());
@@ -601,6 +607,13 @@ const LoginForm = ({ onLogin, showToast, onSyncPull }) => {
         bgConfig: JSON.parse(localStorage.getItem('bg_config') || '{}'),
         bgUrl: localStorage.getItem('bg_url') || ''
     });
+
+    const pushLocalDataToCloud = async (data = getLocalSyncData()) => {
+        if (onSyncPush) {
+            return onSyncPush(data, { force: true });
+        }
+        return syncService.pushData(data, { force: true });
+    };
 
     const mergeData = async () => {
         try {
@@ -671,7 +684,7 @@ const LoginForm = ({ onLogin, showToast, onSyncPull }) => {
             localStorage.setItem('last_local_update', String(Date.now()));
 
             // Push merged data to cloud immediately
-            await syncService.pushData(mergedData);
+            await pushLocalDataToCloud(mergedData);
             
             showToast('数据合并成功！', 'success');
             
@@ -718,7 +731,7 @@ const LoginForm = ({ onLogin, showToast, onSyncPull }) => {
             try {
                 const localData = getLocalSyncData();
                 
-                await syncService.pushData(localData);
+                await pushLocalDataToCloud(localData);
                 localStorage.removeItem(SYNC_AUTO_PUSH_BLOCKED_KEY);
                 showToast('本地数据已上传到云端', 'success');
                 
@@ -760,7 +773,7 @@ const LoginForm = ({ onLogin, showToast, onSyncPull }) => {
             
             if (isRegistering) {
                 await syncService.register(email, password);
-                await syncService.pushData(getLocalSyncData());
+                await pushLocalDataToCloud();
                 localStorage.removeItem(SYNC_AUTO_PUSH_BLOCKED_KEY);
                 showToast('账户创建成功！', 'success');
                 onLogin(email);
@@ -780,7 +793,7 @@ const LoginForm = ({ onLogin, showToast, onSyncPull }) => {
                     } else {
                         // Cloud has no data, use local and push
                         localStorage.setItem('last_local_update', String(Date.now()));
-                        await syncService.pushData(getLocalSyncData());
+                        await pushLocalDataToCloud();
                         localStorage.removeItem(SYNC_AUTO_PUSH_BLOCKED_KEY);
                     }
                 } else {

@@ -488,6 +488,40 @@ function App() {
     return () => clearTimeout(timeoutId);
   }, [shortcuts, gridConfig, bgConfig, bgUrl, todos, notes, isLoggedIn, isOnline, isPristineDefaultData, hasPendingLocalChanges, markCloudVersionSynced]);
 
+  const pushLocalToCloud = useCallback(async (dataOverride = null, options = {}) => {
+    if (!syncService.isLoggedIn()) throw new Error('Not logged in');
+    const data = dataOverride || currentSyncDataRef.current;
+    const force = options.force !== false;
+
+    const markSynced = (result, syncedData, requestedUpdatedAt) => {
+      const updatedAt = Number(result?.updatedAt || requestedUpdatedAt || Date.now());
+      markCloudVersionSynced(updatedAt, syncedData);
+      lastPushedSnapshotRef.current = createSyncSnapshot(syncedData);
+      hasCompletedInitialPullRef.current = true;
+      localStorage.removeItem(SYNC_AUTO_PUSH_BLOCKED_KEY);
+      return result;
+    };
+
+    try {
+      const result = await syncService.pushData(data, { force });
+      if (!result) throw new Error('当前离线，无法同步到云端');
+      return markSynced(result, data);
+    } catch (error) {
+      const currentUpdatedAt = Number(error?.currentUpdatedAt);
+      if (!error?.isSyncConflict || !Number.isFinite(currentUpdatedAt)) {
+        throw error;
+      }
+
+      const updatedAt = Math.max(Date.now(), currentUpdatedAt + 1);
+      const result = await syncService.pushData(data, {
+        baseUpdatedAt: currentUpdatedAt,
+        updatedAt,
+      });
+      if (!result) throw new Error('当前离线，无法同步到云端');
+      return markSynced(result, data, updatedAt);
+    }
+  }, [markCloudVersionSynced]);
+
   useEffect(() => { localStorage.setItem('todos', JSON.stringify(todos)); }, [todos]);
 
   useEffect(() => {
@@ -618,6 +652,7 @@ function App() {
             onEditShortcut={handleEditShortcut}
             onRemoveShortcut={handleRemoveShortcut}
             onSyncPull={pullFromCloud}
+            onSyncPush={pushLocalToCloud}
             triggerTab={settingsTrigger}
             onOpenChange={() => {}}
         />

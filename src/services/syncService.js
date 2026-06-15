@@ -18,13 +18,24 @@ const createNetworkError = (error, workerUrl) => {
     return networkError;
 };
 
-const readResponseError = async (response, fallback) => {
+const createResponseError = async (response, fallback) => {
+    let payload = null;
     try {
-        const error = await response.json();
-        return error.error || fallback;
+        payload = await response.json();
     } catch {
-        return fallback;
+        payload = null;
     }
+
+    const error = new Error(payload?.error || fallback);
+    error.status = response.status;
+    if (payload?.code) error.code = payload.code;
+    if (Object.prototype.hasOwnProperty.call(payload || {}, 'currentUpdatedAt')) {
+        error.currentUpdatedAt = payload.currentUpdatedAt;
+    }
+    if (response.status === 409 || String(payload?.code || '').includes('CONFLICT')) {
+        error.isSyncConflict = true;
+    }
+    return error;
 };
 
 const normalizeSyncData = (data = {}) => {
@@ -124,7 +135,7 @@ class SyncService {
         });
 
         if (!response.ok) {
-            throw new Error(await readResponseError(response, 'Registration failed'));
+            throw await createResponseError(response, 'Registration failed');
         }
 
         const data = await response.json();
@@ -143,7 +154,7 @@ class SyncService {
         });
 
         if (!response.ok) {
-            throw new Error(await readResponseError(response, 'Login failed'));
+            throw await createResponseError(response, 'Login failed');
         }
 
         const data = await response.json();
@@ -203,7 +214,7 @@ class SyncService {
                 this.logout();
                 throw new Error('Session expired. Please login again.');
             }
-            throw new Error(await readResponseError(response, 'Pull failed'));
+            throw await createResponseError(response, 'Pull failed');
         }
 
         const result = await response.json();
@@ -216,7 +227,7 @@ class SyncService {
     }
 
     // Push data to server
-    async pushData(data) {
+    async pushData(data, options = {}) {
         if (!this.token) {
             throw new Error('Not logged in');
         }
@@ -226,12 +237,17 @@ class SyncService {
             return null;
         }
 
-        const baseUpdatedAt = readStoredTimestamp(LAST_CLOUD_UPDATE_KEY) || readStoredTimestamp(LAST_LOCAL_UPDATE_KEY);
+        const optionBaseUpdatedAt = Number(options.baseUpdatedAt);
+        const storedBaseUpdatedAt = readStoredTimestamp(LAST_CLOUD_UPDATE_KEY) || readStoredTimestamp(LAST_LOCAL_UPDATE_KEY);
+        const baseUpdatedAt = Number.isFinite(optionBaseUpdatedAt) ? optionBaseUpdatedAt : storedBaseUpdatedAt;
+        const optionUpdatedAt = Number(options.updatedAt);
         const syncData = {
             ...data,
-            updatedAt: Date.now(),
-            baseUpdatedAt: baseUpdatedAt || null,
+            updatedAt: Number.isFinite(optionUpdatedAt) ? optionUpdatedAt : Date.now(),
         };
+        if (!options.force && Number.isFinite(baseUpdatedAt)) {
+            syncData.baseUpdatedAt = baseUpdatedAt;
+        }
 
         const response = await this.requestWorker('/api/sync/push', {
             method: 'POST',
@@ -247,7 +263,7 @@ class SyncService {
                 this.logout();
                 throw new Error('Session expired. Please login again.');
             }
-            throw new Error(await readResponseError(response, 'Push failed'));
+            throw await createResponseError(response, 'Push failed');
         }
 
         const result = await response.json();
