@@ -329,14 +329,14 @@ const SortableShortcutItem = ({
     };
 
     const longPressEvents = useLongPress(() => {
-        setIsEditing(true);
+        setIsEditing(false);
         setContextShortcutId(shortcut.id);
     }, {
         delay: 420
     });
 
-    const isContextOpen = isEditing || contextShortcutId === shortcut.id;
-    const dndListeners = isContextOpen && !isEditing ? {} : listeners;
+    const isContextOpen = contextShortcutId === shortcut.id;
+    const dndListeners = isContextOpen ? {} : listeners;
 
     const itemWidth = iconSize + 24;
 
@@ -376,7 +376,7 @@ const SortableShortcutItem = ({
             onContextMenu={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                setIsEditing(true);
+                setIsEditing(false);
                 setContextShortcutId(shortcut.id);
             }}
             tabIndex={0}
@@ -391,7 +391,7 @@ const SortableShortcutItem = ({
                 }
             }}
         >
-            <div className={`relative flex justify-center ${isEditing && !isDragging ? 'animate-jiggle' : ''}`}>
+            <div className={`relative flex justify-center ${isContextOpen && !isDragging ? 'animate-jiggle' : ''}`}>
                 <ShortcutIcon
                     shortcut={shortcut}
                     iconSize={iconSize}
@@ -399,7 +399,7 @@ const SortableShortcutItem = ({
                     onRemove={onRemoveShortcut}
                     onEdit={setEditingShortcut}
                     setContextShortcutId={setContextShortcutId}
-                    isEditMode={isEditing}
+                    isEditMode={false}
                 />
                 {isMergeTarget && (
                     <div
@@ -553,7 +553,7 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
         isTouchDragRef.current = false;
 
         if (isStationaryTouchPress) {
-            setIsEditing(true);
+            setIsEditing(false);
             setContextShortcutId(active.id);
             return;
         }

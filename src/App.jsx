@@ -213,12 +213,10 @@ function App() {
       }
 
       const lastLocalUpdate = readStoredTimestamp(LAST_LOCAL_UPDATE_KEY);
-      const lastCloudUpdate = readStoredTimestamp(LAST_CLOUD_UPDATE_KEY);
       const cloudUpdatedAt = Number.isFinite(Number(cloudData.updatedAt)) ? Number(cloudData.updatedAt) : null;
 
-      const knownRemoteVersion = lastCloudUpdate || lastLocalUpdate || 0;
-      const cloudIsNewer = cloudUpdatedAt ? cloudUpdatedAt > knownRemoteVersion : !lastLocalUpdate;
-      const shouldApplyCloud = forceApply || (cloudIsNewer && !hasPendingLocalChanges());
+      const shouldApplyCloud = forceApply || !lastLocalUpdate || (cloudUpdatedAt && cloudUpdatedAt > lastLocalUpdate);
+      const shouldPushLocal = !forceApply && lastLocalUpdate && (!cloudUpdatedAt || lastLocalUpdate > cloudUpdatedAt);
       let updated = false;
 
       if (shouldApplyCloud) {
@@ -267,11 +265,35 @@ function App() {
         if (updated) {
           markCloudVersionSynced(cloudUpdatedAt || Date.now(), appliedData);
         }
+
+        setTimeout(() => { isPullingRef.current = false; }, 100);
+        hasCompletedInitialPullRef.current = true;
+        return updated;
+      }
+
+      if (shouldPushLocal) {
+        const data = currentSyncDataRef.current;
+        const pushOptions = cloudUpdatedAt ? { baseUpdatedAt: cloudUpdatedAt } : { force: true };
+        const result = await syncService.pushData(data, pushOptions);
+        if (!result) {
+          hasCompletedInitialPullRef.current = true;
+          isPullingRef.current = false;
+          return false;
+        }
+
+        const pushedUpdatedAt = Number(result.updatedAt || Date.now());
+        if (Number.isFinite(pushedUpdatedAt)) {
+          markCloudVersionSynced(pushedUpdatedAt, data);
+        }
+        lastPushedSnapshotRef.current = createSyncSnapshot(data);
+        setTimeout(() => { isPullingRef.current = false; }, 100);
+        hasCompletedInitialPullRef.current = true;
+        return true;
       }
 
       setTimeout(() => { isPullingRef.current = false; }, 100);
       hasCompletedInitialPullRef.current = true;
-      return updated;
+      return false;
     } catch (error) {
       isPullingRef.current = false;
       if (throwOnError) throw error;
@@ -282,7 +304,7 @@ function App() {
       console.error('Failed to pull from cloud:', error);
       return false;
     }
-  }, [hasPendingLocalChanges, markCloudVersionSynced]);
+  }, [markCloudVersionSynced]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -458,9 +480,10 @@ function App() {
     if (isPristineDefaultData()) return;
     const data = currentSyncDataRef.current;
     const snapshot = createSyncSnapshot(data);
+    const lastLocalUpdate = readStoredTimestamp(LAST_LOCAL_UPDATE_KEY);
+    if (!lastLocalUpdate) return;
     if (!hasPendingLocalChanges()) {
       if (snapshot === lastPushedSnapshotRef.current) return;
-      const lastLocalUpdate = readStoredTimestamp(LAST_LOCAL_UPDATE_KEY);
       const lastCloudUpdate = readStoredTimestamp(LAST_CLOUD_UPDATE_KEY);
       if (lastLocalUpdate && lastCloudUpdate && lastLocalUpdate <= lastCloudUpdate) {
         lastPushedSnapshotRef.current = snapshot;
