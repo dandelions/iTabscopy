@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Cloud, RefreshCw, Globe, LogOut, Github, Combine, Info, Tag, Clock } from 'lucide-react';
+import { X, Cloud, Download, RefreshCw, Globe, LogOut, Github, Combine, Info, Tag, Clock } from 'lucide-react';
 import { fetchRandomPhoto, cacheImage } from '../utils/unsplash';
 import WallpaperModal from './WallpaperModal';
 import IconSelector from './IconSelector';
@@ -53,6 +53,7 @@ const Settings = ({
     const [isLoggedIn, setIsLoggedIn] = useState(syncService.isLoggedIn());
     const [userEmail, setUserEmail] = useState(syncService.getEmail());
     const [isSyncing, setIsSyncing] = useState(false);
+    const [isPullingFromCloud, setIsPullingFromCloud] = useState(false);
     const [bgSource, setBgSource] = useState(localStorage.getItem('bg_source') || 'bing'); // 新增: 壁纸来源状态
     
 
@@ -345,6 +346,7 @@ const Settings = ({
                                     <SyncPanel
                                         email={userEmail}
                                         isSyncing={isSyncing}
+                                        isPullingFromCloud={isPullingFromCloud}
                                         onSync={async () => {
                                             setIsSyncing(true);
                                             try {
@@ -369,6 +371,23 @@ const Settings = ({
                                                 showToast(error.message, 'error');
                                             } finally {
                                                 setIsSyncing(false);
+                                            }
+                                        }}
+                                        onPullFromCloud={async () => {
+                                            setIsPullingFromCloud(true);
+                                            try {
+                                                if (!onSyncPull) {
+                                                    throw new Error('同步入口不可用，请刷新后重试');
+                                                }
+                                                const applied = await onSyncPull({ forceApply: true, throwOnError: true });
+                                                if (!applied) {
+                                                    throw new Error('云端暂无可应用数据');
+                                                }
+                                                showToast('云端数据已同步到本地', 'success');
+                                            } catch (error) {
+                                                showToast(error.message, 'error');
+                                            } finally {
+                                                setIsPullingFromCloud(false);
                                             }
                                         }}
                                         onLogout={async () => {
@@ -975,7 +994,7 @@ const LoginForm = ({ onLogin, showToast, onSyncPull, onSyncPush }) => {
 };
 
 // Sync Panel Component
-const SyncPanel = ({ email, isSyncing, onSync, onLogout, lastSync }) => {
+const SyncPanel = ({ email, isSyncing, isPullingFromCloud, onSync, onPullFromCloud, onLogout, lastSync }) => {
     const formatLastSync = (timestamp) => {
         if (!timestamp) return '从未';
         const numeric = Number(timestamp);
@@ -1011,7 +1030,7 @@ const SyncPanel = ({ email, isSyncing, onSync, onLogout, lastSync }) => {
 
                 <button
                     onClick={onSync}
-                    disabled={isSyncing}
+                    disabled={isSyncing || isPullingFromCloud}
                     className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-sm font-medium text-white rounded-lg transition-colors shadow-lg disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                     {isSyncing ? (
@@ -1020,6 +1039,19 @@ const SyncPanel = ({ email, isSyncing, onSync, onLogout, lastSync }) => {
                         <Cloud className="h-4 w-4" />
                     )}
                     <span>{isSyncing ? '同步中...' : '立即同步到云端'}</span>
+                </button>
+
+                <button
+                    onClick={onPullFromCloud}
+                    disabled={isSyncing || isPullingFromCloud}
+                    className="w-full py-2.5 bg-white/10 hover:bg-white/20 text-sm font-medium text-white rounded-lg transition-colors shadow-lg border border-white/10 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                    {isPullingFromCloud ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                    ) : (
+                        <Download className="h-4 w-4" />
+                    )}
+                    <span>{isPullingFromCloud ? '同步中...' : '同步云端到本地'}</span>
                 </button>
 
                 {/* Info */}
