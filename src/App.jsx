@@ -48,8 +48,6 @@ const normalizeSyncData = (data = {}) => {
   return {
     shortcuts: Array.isArray(source.shortcuts) ? source.shortcuts : [],
     gridConfig: source.gridConfig && typeof source.gridConfig === 'object' ? source.gridConfig : {},
-    bgConfig: source.bgConfig && typeof source.bgConfig === 'object' ? source.bgConfig : {},
-    bgUrl: typeof source.bgUrl === 'string' ? source.bgUrl : '',
     todos: Array.isArray(source.todos) ? source.todos : [],
     notes: Array.isArray(source.notes) ? source.notes : [],
   };
@@ -404,7 +402,6 @@ function App() {
     setBgConfig(prev => {
       const updated = { ...prev, ...newConfig };
       localStorage.setItem('bg_config', JSON.stringify(updated));
-      updateLocalTimestamp();
       return updated;
     });
   };
@@ -421,7 +418,6 @@ function App() {
   const handleBgUpdate = (url) => {
     setBgUrl(url);
     localStorage.setItem('bg_url', url);
-    updateLocalTimestamp();
   };
 
   useEffect(() => {
