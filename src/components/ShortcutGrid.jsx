@@ -422,7 +422,7 @@ const SortableShortcutItem = ({
 };
 
 const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onReorder, leftOffset = 0 }) => {
-    const { cols = 5, rows = 3, iconSize = 96 } = config || {};
+    const { cols = 4, rows = 4, iconSize = 50 } = config || {};
     const [currentPage, setCurrentPage] = useState(0);
     const [isEditing, setIsEditing] = useState(false);
     const [contextShortcutId, setContextShortcutId] = useState(null);

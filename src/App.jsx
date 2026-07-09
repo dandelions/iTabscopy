@@ -70,7 +70,7 @@ function App() {
   const [bgUrl, setBgUrl] = useState(localStorage.getItem('bg_url') || DEFAULT_BG_URL);
   const [gridConfig, setGridConfig] = useState(() => {
     const saved = localStorage.getItem('grid_config');
-    return saved ? JSON.parse(saved) : { cols: 8, rows: 4, iconSize: 80, showSearchBar: true };
+    return saved ? JSON.parse(saved) : { cols: 4, rows: 4, iconSize: 50, showSearchBar: true };
   });
   const [bgConfig, setBgConfig] = useState(() => {
     const saved = localStorage.getItem('bg_config');

@@ -1,26 +1,29 @@
 import { useState, useEffect, useRef } from 'react';
 import { Search, ChevronDown, Check } from 'lucide-react';
+import bingSearchIcon from '../assets/search-bing.svg';
+import duckDuckGoSearchIcon from '../assets/search-duckduckgo.svg';
+import googleSearchIcon from '../assets/search-google.svg';
 
 const SEARCH_ENGINES = {
     google: {
         name: 'Google',
         url: 'https://www.google.com/search?q=',
-        icon: 'https://www.google.com/s2/favicons?domain=google.com&sz=128'
+        icon: googleSearchIcon
     },
     bing: {
         name: 'Bing',
         url: 'https://www.bing.com/search?q=',
-        icon: 'https://www.google.com/s2/favicons?domain=bing.com&sz=128'
+        icon: bingSearchIcon
     },
     bingCn: {
         name: 'BingCn',
         url: 'https://cn.bing.com/search?q=',
-        icon: 'https://www.google.com/s2/favicons?domain=bing.com&sz=128'
+        icon: bingSearchIcon
     },
     duckduckgo: {
         name: 'DuckDuckGo',
         url: 'https://duckduckgo.com/?q=',
-        icon: 'https://www.google.com/s2/favicons?domain=duckduckgo.com&sz=128'
+        icon: duckDuckGoSearchIcon
     }
 };
 
