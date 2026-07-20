@@ -425,10 +425,11 @@ function App() {
       const lastFetch = localStorage.getItem('bg_last_fetch');
       const today = new Date().toDateString();
       const currentBg = localStorage.getItem('bg_url') || DEFAULT_BG_URL;
-      const isUsingBing = currentBg.includes('bing.com');
+      const bgSource = localStorage.getItem('bg_source')
+        || (currentBg.includes('bing.com') ? 'bing' : 'unsplash');
 
       if (lastFetch !== today) {
-        if (isUsingBing) {
+        if (bgSource === 'bing') {
           try {
             const baseUrl = syncService.getWorkerUrl();
             if (baseUrl) {
@@ -446,14 +447,18 @@ function App() {
           } catch (error) {
             console.error('自动刷新必应壁纸失败:', error);
           }
+
+          return;
         }
 
-        const photo = await fetchRandomPhoto();
-        if (photo) {
-          setBgUrl(photo.url);
-          localStorage.setItem('bg_url', photo.url);
-          localStorage.setItem('bg_last_fetch', today);
-          cacheImage(photo.url);
+        if (bgSource === 'unsplash') {
+          const photo = await fetchRandomPhoto();
+          if (photo) {
+            setBgUrl(photo.url);
+            localStorage.setItem('bg_url', photo.url);
+            localStorage.setItem('bg_last_fetch', today);
+            cacheImage(photo.url);
+          }
         }
       }
     };

@@ -58,6 +58,7 @@ export const fetchPopularPhotos = async (query = '', page = 1) => {
             regularUrl: img.urls.regular,
             fullUrl: img.urls.full,
             thumb: img.urls.small,
+            altDescription: img.alt_description,
             photographer: img.user.name,
             photographerLink: img.user.links.html,
         }));
@@ -87,7 +88,7 @@ export const getCachedImage = async (url) => {
             return URL.createObjectURL(blob);
         }
         return null;
-    } catch (err) {
+    } catch {
         return null;
     }
 };

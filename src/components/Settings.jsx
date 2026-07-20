@@ -58,6 +58,8 @@ const Settings = ({
     
 
     const handleBgRefresh = async () => {
+        if (bgSource === 'local') return;
+
         setIsLoadingBg(true);
         let photo;
         if (bgSource === 'bing') {
@@ -265,7 +267,7 @@ const Settings = ({
                                             {/* Overlay Slider */}
                                             <div className="space-y-3">
                                                 <div className="flex justify-between">
-                                                    <label className="text-sm text-white/80">Darkness</label>
+                                                    <label className="text-sm text-white/80">基础 Darkness</label>
                                                     <span className="text-sm font-mono text-white/60">{bgConfig?.overlay || 0}%</span>
                                                 </div>
                                                 <input
@@ -276,6 +278,7 @@ const Settings = ({
                                                     onChange={(e) => onBgConfigChange({ overlay: Number(e.target.value) })}
                                                     className="w-full accent-white/80 h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer"
                                                 />
+                                                <p className="text-xs text-white/40">实际暗度会随本地时间平滑变化，中午保持基础值，午夜达到 100%。</p>
                                             </div>
                                             {/* Wallpaper Source Selector */}
                                             <div className="space-y-3">
@@ -290,6 +293,7 @@ const Settings = ({
                                                 >
                                                     <option value="unsplash">Unsplash</option>
                                                     <option value="bing">Bing</option>
+                                                    <option value="local" disabled>本地上传</option>
                                                 </select>
                                             </div>
                                             {/* Wallpaper Preview & Change */}
@@ -311,7 +315,7 @@ const Settings = ({
                                                     </button>
                                                     <button
                                                         onClick={handleBgRefresh}
-                                                        disabled={isLoadingBg}
+                                                        disabled={isLoadingBg || bgSource === 'local'}
                                                         className="px-4 py-2 bg-white/10 hover:bg-white/20 text-sm font-medium text-white rounded-lg transition-colors shadow-lg border border-white/10 disabled:opacity-50"
                                                     >
                                                         {isLoadingBg ? (
@@ -456,10 +460,14 @@ const Settings = ({
             <WallpaperModal
                 isOpen={isWallpaperModalOpen}
                 onClose={() => setIsWallpaperModalOpen(false)}
-                onSelectWallpaper={(url) => {
+                onSelectWallpaper={(url, source) => {
                     localStorage.setItem('bg_url', url);
                     localStorage.setItem('bg_last_fetch', new Date().toDateString());
-                    cacheImage(url);
+                    if (source) {
+                        setBgSource(source);
+                        localStorage.setItem('bg_source', source);
+                    }
+                    if (/^https?:\/\//.test(url)) cacheImage(url);
                     if (onBgUpdate) onBgUpdate(url);
                 }}
             />

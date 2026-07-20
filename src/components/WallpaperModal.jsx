@@ -67,7 +67,10 @@ const WallpaperModal = ({ isOpen, onClose, onSelectWallpaper }) => {
 
     useEffect(() => {
         if (isOpen && activeTab === 'unsplash') {
-            loadUnsplashPhotos(selectedCategory);
+            const timer = window.setTimeout(() => {
+                loadUnsplashPhotos(selectedCategory);
+            }, 0);
+            return () => window.clearTimeout(timer);
         }
     }, [isOpen, activeTab, selectedCategory, loadUnsplashPhotos]);
 
@@ -78,7 +81,7 @@ const WallpaperModal = ({ isOpen, onClose, onSelectWallpaper }) => {
         const reader = new FileReader();
         reader.onload = (event) => {
             if (event.target?.result) {
-                onSelectWallpaper(event.target.result);
+                onSelectWallpaper(event.target.result, 'local');
                 onClose();
             }
         };
@@ -157,7 +160,7 @@ const WallpaperModal = ({ isOpen, onClose, onSelectWallpaper }) => {
                                             <div
                                                 className="relative aspect-video rounded-xl overflow-hidden border border-white/10 shadow-2xl group cursor-pointer"
                                                 onClick={() => {
-                                                    onSelectWallpaper(bingData.url);
+                                                    onSelectWallpaper(bingData.url, 'bing');
                                                     onClose();
                                                 }}
                                             >
@@ -175,7 +178,7 @@ const WallpaperModal = ({ isOpen, onClose, onSelectWallpaper }) => {
                                             </div>
                                             <button
                                                 onClick={() => {
-                                                    onSelectWallpaper(bingData.url);
+                                                    onSelectWallpaper(bingData.url, 'bing');
                                                     onClose();
                                                 }}
                                                 className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-sm font-medium text-white rounded-xl transition-colors shadow-lg shadow-blue-600/20"
@@ -199,20 +202,20 @@ const WallpaperModal = ({ isOpen, onClose, onSelectWallpaper }) => {
                                         <div
                                             key={photo.id}
                                             onClick={() => {
-                                                onSelectWallpaper(photo.urls.regular);
+                                                onSelectWallpaper(photo.regularUrl || photo.url, 'unsplash');
                                                 onClose();
                                             }}
                                             className="relative aspect-video rounded-xl overflow-hidden border border-white/5 hover:border-white/20 shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer group bg-zinc-800"
                                         >
                                             <img
-                                                src={photo.urls.small}
-                                                alt={photo.alt_description || 'Wallpaper'}
+                                                src={photo.thumb || photo.regularUrl || photo.url}
+                                                alt={photo.altDescription || 'Wallpaper'}
                                                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                                                 loading="lazy"
                                             />
                                             <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-3">
                                                 <p className="text-white text-[10px] truncate">
-                                                    by {photo.user.name}
+                                                    by {photo.photographer}
                                                 </p>
                                             </div>
                                         </div>
