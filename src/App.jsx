@@ -424,9 +424,16 @@ function App() {
     const loadBackground = async () => {
       const lastFetch = localStorage.getItem('bg_last_fetch');
       const today = new Date().toDateString();
-      const currentBg = localStorage.getItem('bg_url') || DEFAULT_BG_URL;
-      const bgSource = localStorage.getItem('bg_source')
-        || (currentBg.includes('bing.com') ? 'bing' : 'unsplash');
+      const storedBgSource = localStorage.getItem('bg_source');
+      const bgSource = storedBgSource === 'unsplash' ? 'unsplash' : 'bing';
+      const manualWallpaperDate = localStorage.getItem('bg_manual_date');
+
+      if (storedBgSource !== bgSource) {
+        localStorage.setItem('bg_source', bgSource);
+      }
+
+      if (manualWallpaperDate === today) return;
+      if (manualWallpaperDate) localStorage.removeItem('bg_manual_date');
 
       if (lastFetch !== today) {
         if (bgSource === 'bing') {
@@ -440,6 +447,7 @@ function App() {
                   setBgUrl(data.url);
                   localStorage.setItem('bg_url', data.url);
                   localStorage.setItem('bg_last_fetch', today);
+                  localStorage.removeItem('bg_manual_date');
                   return;
                 }
               }
@@ -457,6 +465,7 @@ function App() {
             setBgUrl(photo.url);
             localStorage.setItem('bg_url', photo.url);
             localStorage.setItem('bg_last_fetch', today);
+            localStorage.removeItem('bg_manual_date');
             cacheImage(photo.url);
           }
         }

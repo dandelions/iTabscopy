@@ -6,6 +6,7 @@ import IconSelector from './IconSelector';
 import ToastContainer, { useToast } from './Toast';
 import syncService from '../services/syncService';
 import { fetchBingDailyPhoto, cacheImage as cacheBingImage } from '../utils/imageService'; // 确保路径正确
+import { getTimeAdjustedOverlay } from '../utils/background';
 
 const APP_VERSION = import.meta.env.VITE_APP_VERSION || 'unknown';
 const BUILD_TIME = import.meta.env.VITE_BUILD_TIME || '';
@@ -54,12 +55,16 @@ const Settings = ({
     const [userEmail, setUserEmail] = useState(syncService.getEmail());
     const [isSyncing, setIsSyncing] = useState(false);
     const [isPullingFromCloud, setIsPullingFromCloud] = useState(false);
-    const [bgSource, setBgSource] = useState(localStorage.getItem('bg_source') || 'bing'); // 新增: 壁纸来源状态
+    const [bgSource, setBgSource] = useState(() => {
+        const storedSource = localStorage.getItem('bg_source');
+        return storedSource === 'unsplash' ? 'unsplash' : 'bing';
+    });
+    const [darknessTime, setDarknessTime] = useState(() => new Date());
+    const baseOverlay = Number(bgConfig?.overlay ?? 30);
+    const effectiveOverlay = getTimeAdjustedOverlay(baseOverlay, darknessTime);
     
 
     const handleBgRefresh = async () => {
-        if (bgSource === 'local') return;
-
         setIsLoadingBg(true);
         let photo;
         if (bgSource === 'bing') {
@@ -73,6 +78,7 @@ const Settings = ({
             console.log("bgSource:"+bgSource+"获取壁纸")
             localStorage.setItem('bg_url', photo.url);
             localStorage.setItem('bg_last_fetch', new Date().toDateString());
+            localStorage.removeItem('bg_manual_date');
             if (bgSource === 'bing') {
                 cacheBingImage(photo.url);
             }else{
@@ -96,6 +102,20 @@ const Settings = ({
     useEffect(() => {
         onOpenChange?.(isOpen);
     }, [isOpen, onOpenChange]);
+
+    useEffect(() => {
+        const updateDarknessTime = () => setDarknessTime(new Date());
+        const interval = window.setInterval(updateDarknessTime, 60 * 1000);
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') updateDarknessTime();
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => {
+            window.clearInterval(interval);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, []);
 
     const tabTitle = activeTab === 'shortcuts' ? '链接'
         : activeTab === 'sync' ? '同步'
@@ -267,14 +287,17 @@ const Settings = ({
                                             {/* Overlay Slider */}
                                             <div className="space-y-3">
                                                 <div className="flex justify-between">
-                                                    <label className="text-sm text-white/80">基础 Darkness</label>
-                                                    <span className="text-sm font-mono text-white/60">{bgConfig?.overlay || 0}%</span>
+                                                    <label className="text-sm text-white/80">
+                                                        Darkness
+                                                        <span className="ml-2 text-xs text-white/40">基础 {baseOverlay}%</span>
+                                                    </label>
+                                                    <span className="text-sm font-mono text-white/60">当前 {effectiveOverlay}%</span>
                                                 </div>
                                                 <input
                                                     type="range"
                                                     min="0"
                                                     max="90"
-                                                    value={bgConfig?.overlay || 0}
+                                                    value={baseOverlay}
                                                     onChange={(e) => onBgConfigChange({ overlay: Number(e.target.value) })}
                                                     className="w-full accent-white/80 h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer"
                                                 />
@@ -293,7 +316,6 @@ const Settings = ({
                                                 >
                                                     <option value="unsplash">Unsplash</option>
                                                     <option value="bing">Bing</option>
-                                                    <option value="local" disabled>本地上传</option>
                                                 </select>
                                             </div>
                                             {/* Wallpaper Preview & Change */}
@@ -461,11 +483,16 @@ const Settings = ({
                 isOpen={isWallpaperModalOpen}
                 onClose={() => setIsWallpaperModalOpen(false)}
                 onSelectWallpaper={(url, source) => {
+                    const today = new Date().toDateString();
                     localStorage.setItem('bg_url', url);
-                    localStorage.setItem('bg_last_fetch', new Date().toDateString());
-                    if (source) {
-                        setBgSource(source);
-                        localStorage.setItem('bg_source', source);
+                    localStorage.setItem('bg_last_fetch', today);
+                    if (source === 'bing') {
+                        setBgSource('bing');
+                        localStorage.setItem('bg_source', 'bing');
+                        localStorage.removeItem('bg_manual_date');
+                    } else {
+                        localStorage.setItem('bg_source', bgSource);
+                        localStorage.setItem('bg_manual_date', today);
                     }
                     if (/^https?:\/\//.test(url)) cacheImage(url);
                     if (onBgUpdate) onBgUpdate(url);
