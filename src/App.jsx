@@ -402,6 +402,7 @@ function App() {
     setBgConfig(prev => {
       const updated = { ...prev, ...newConfig };
       localStorage.setItem('bg_config', JSON.stringify(updated));
+      updateLocalTimestamp();
       return updated;
     });
   };

@@ -298,7 +298,10 @@ const Settings = ({
                                                     min="0"
                                                     max="90"
                                                     value={baseOverlay}
-                                                    onChange={(e) => onBgConfigChange({ overlay: Number(e.target.value) })}
+                                                    onChange={(e) => {
+                                                        onBgConfigChange({ overlay: Number(e.target.value) });
+                                                        setDarknessTime(new Date());
+                                                    }}
                                                     className="w-full accent-white/80 h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer"
                                                 />
                                                 <p className="text-xs text-white/40">实际暗度会随本地时间平滑变化，中午保持基础值，午夜达到 100%。</p>
