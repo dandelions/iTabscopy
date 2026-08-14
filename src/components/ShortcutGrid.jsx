@@ -322,8 +322,9 @@ const SortableShortcutItem = ({
     } = useSortable({ id: shortcut.id });
 
     const style = {
-        transform: CSS.Transform.toString(transform),
-        transition,
+        // 合并候选必须留在原位，不能被 rectSortingStrategy 的换位动画推开。
+        transform: isMergeTarget ? undefined : CSS.Transform.toString(transform),
+        transition: isMergeTarget ? undefined : transition,
         zIndex: isDragging ? 50 : 'auto',
         opacity: isDragging ? 0 : 1,
     };
