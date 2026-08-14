@@ -64,7 +64,7 @@ const calculateGaps = (cols, rows, screenWidth, iconSize, leftOffset = 0) => {
 };
 
 const MERGE_PREVIEW_RATIO = 0.01;
-const MERGE_CONFIRM_RATIO = 0.15;
+const MERGE_PREVIEW_DISTANCE_RATIO = 0.55;
 
 const getShortcutElement = (id) => {
     const idString = String(id);
@@ -477,42 +477,52 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
         return null;
     }, [shortcuts]);
 
-    const getMergeState = useCallback((active, over, delta) => {
-        if (!active || !over || active.id === over.id) {
+    const getMergeState = useCallback((active, delta) => {
+        if (!active) {
             return { dropCandidateId: null, mergeTargetId: null };
         }
 
         const activeShortcut = shortcuts.find(s => s.id === active.id);
-        const overShortcut = shortcuts.find(s => s.id === over.id);
-
-        if (!activeShortcut || !overShortcut || activeShortcut.type === 'folder') {
-            return { dropCandidateId: null, mergeTargetId: null };
-        }
-
         const activeRect = getDragRect(active, delta);
-        // 排序策略会临时 transform 目标元素；优先使用当前 DOM 矩形保证桌面端命中准确。
-        const overRect = toComparableRect(getShortcutElement(over.id)?.getBoundingClientRect()) || toComparableRect(over.rect);
-        if (!overRect) {
-            return { dropCandidateId: null, mergeTargetId: null };
-        }
-        const ratio = getIntersectionRatio(activeRect, overRect);
         const activeCenter = getRectCenter(activeRect);
-        const isCenteredOnTarget = isPointInsideRect(activeCenter, overRect);
-
-        // 扩大合并检测范围：中心点距离目标中心很近时也视为合并候选
-        const overCenter = getRectCenter(overRect);
-        const distX = Math.abs((activeCenter?.x || 0) - (overCenter?.x || 0));
-        const distY = Math.abs((activeCenter?.y || 0) - (overCenter?.y || 0));
-        const centerDistance = Math.sqrt(distX * distX + distY * distY);
-        const isNearTarget = activeCenter && overCenter && centerDistance <= Math.max(overRect.width, overRect.height) * 1.2;
-
-        if (ratio < MERGE_PREVIEW_RATIO && !isCenteredOnTarget && !isNearTarget) {
+        if (!activeShortcut || activeShortcut.type === 'folder' || !activeCenter) {
             return { dropCandidateId: null, mergeTargetId: null };
         }
 
+        let closestCandidate = null;
+
+        // 不依赖 dnd-kit 的 over：排序动画会改变 over 的缓存位置，导致释放时误判为换位。
+        for (const candidate of shortcuts) {
+            if (candidate.id === active.id) continue;
+
+            const candidateRect = toComparableRect(getShortcutElement(candidate.id)?.getBoundingClientRect());
+            const candidateCenter = getRectCenter(candidateRect);
+            if (!candidateRect || !candidateCenter) continue;
+
+            const ratio = getIntersectionRatio(activeRect, candidateRect);
+            const isCenteredOnTarget = isPointInsideRect(activeCenter, candidateRect);
+            const centerDistance = Math.hypot(
+                activeCenter.x - candidateCenter.x,
+                activeCenter.y - candidateCenter.y
+            );
+            const mergeDistance = Math.hypot(candidateRect.width, candidateRect.height) * MERGE_PREVIEW_DISTANCE_RATIO;
+            const isNearTarget = centerDistance <= mergeDistance;
+
+            if (ratio < MERGE_PREVIEW_RATIO && !isCenteredOnTarget && !isNearTarget) continue;
+
+            if (!closestCandidate || centerDistance < closestCandidate.centerDistance) {
+                closestCandidate = { id: candidate.id, centerDistance };
+            }
+        }
+
+        if (!closestCandidate) {
+            return { dropCandidateId: null, mergeTargetId: null };
+        }
+
+        // 进入候选范围即展示虚线框，并在释放时执行合并而不是排序。
         return {
-            dropCandidateId: over.id,
-            mergeTargetId: (ratio >= MERGE_CONFIRM_RATIO || isCenteredOnTarget || isNearTarget) ? over.id : null,
+            dropCandidateId: closestCandidate.id,
+            mergeTargetId: closestCandidate.id,
         };
     }, [shortcuts]);
 
@@ -532,18 +542,19 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
         isTouchDragRef.current = event.activatorEvent?.type?.startsWith('touch') || window.innerWidth <= 768;
     };
 
-    const handleDragOver = (event) => {
-        const { active, over } = event;
-
-        if (!over || active.id === over.id) {
-            resetMergeState();
-            return;
-        }
-
-        const nextMergeState = getMergeState(active, over, event.delta);
+    const updateMergeState = useCallback((active, delta) => {
+        const nextMergeState = getMergeState(active, delta);
         setDropCandidateId(nextMergeState.dropCandidateId);
         setMergeTargetId(nextMergeState.mergeTargetId);
         mergeTargetIdRef.current = nextMergeState.mergeTargetId;
+    }, [getMergeState]);
+
+    const handleDragMove = (event) => {
+        updateMergeState(event.active, event.delta);
+    };
+
+    const handleDragOver = (event) => {
+        updateMergeState(event.active, event.delta);
     };
 
     const handleDragEnd = (event) => {
@@ -557,9 +568,9 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
         const dragDistance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
         const isStationaryTouchPress = isTouchDragRef.current && dragDistance < 15;
 
-        const finalMergeState = getMergeState(active, over, event.delta);
+        const finalMergeState = getMergeState(active, event.delta);
         const finalMergeTargetId = finalMergeState.mergeTargetId || mergeTargetIdRef.current;
-        const isMergeAction = finalMergeTargetId && over && finalMergeTargetId === over.id;
+        const isMergeAction = Boolean(finalMergeTargetId);
         resetMergeState();
         isTouchDragRef.current = false;
 
@@ -573,35 +584,35 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
 
         if (isMergeAction) {
             const activeShortcut = shortcuts.find(s => s.id === active.id);
-            const overShortcut = shortcuts.find(s => s.id === over.id);
+            const targetShortcut = shortcuts.find(s => s.id === finalMergeTargetId);
 
-            if (overShortcut && overShortcut.type === 'folder') {
-                if (activeShortcut.type === 'folder') return;
+            if (targetShortcut && targetShortcut.type === 'folder') {
+                if (activeShortcut?.type === 'folder') return;
 
                 const updatedFolder = {
-                    ...overShortcut,
-                    children: [...(overShortcut.children || []), activeShortcut]
+                    ...targetShortcut,
+                    children: [...(targetShortcut.children || []), activeShortcut]
                 };
 
                 const newShortcuts = shortcuts
                     .filter(s => s.id !== active.id)
-                    .map(s => s.id === over.id ? updatedFolder : s);
+                    .map(s => s.id === finalMergeTargetId ? updatedFolder : s);
 
                 if (onReorder) onReorder(newShortcuts);
                 return;
             }
 
-            if (activeShortcut && overShortcut && activeShortcut.type !== 'folder' && overShortcut.type !== 'folder') {
+            if (activeShortcut && targetShortcut && activeShortcut.type !== 'folder' && targetShortcut.type !== 'folder') {
                 const newFolder = {
-                    id: `folder-${overShortcut.id}-${activeShortcut.id}`,
+                    id: `folder-${targetShortcut.id}-${activeShortcut.id}`,
                     title: 'Folder',
                     type: 'folder',
-                    children: [overShortcut, activeShortcut]
+                    children: [targetShortcut, activeShortcut]
                 };
 
                 const newShortcuts = shortcuts
                     .filter(s => s.id !== active.id)
-                    .map(s => s.id === over.id ? newFolder : s);
+                    .map(s => s.id === finalMergeTargetId ? newFolder : s);
 
                 if (onReorder) onReorder(newShortcuts);
                 return;
@@ -903,6 +914,7 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
             sensors={sensors}
             collisionDetection={collisionDetectionStrategy}
             onDragStart={handleDragStart}
+            onDragMove={handleDragMove}
             onDragOver={handleDragOver}
             onDragEnd={handleDragEnd}
             onDragCancel={() => {
