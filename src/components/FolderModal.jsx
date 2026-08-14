@@ -11,7 +11,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { useIconSource } from '../hooks/useIconSource';
 
 // --- 内部图标项组件 ---
-const SortableItem = ({ shortcut, onRemove, onEdit, isContextOpen, setContextShortcutId, isDraggable = true }) => {
+const SortableItem = ({ shortcut, onRemove, onEdit, onIconEmbedded, isContextOpen, setContextShortcutId, isDraggable = true }) => {
     const {
         attributes,
         listeners,
@@ -24,7 +24,10 @@ const SortableItem = ({ shortcut, onRemove, onEdit, isContextOpen, setContextSho
         disabled: !isDraggable
     });
 
-    const iconSrc = useIconSource(shortcut);
+    const handleIconEmbedded = useCallback((icon) => {
+        onIconEmbedded?.(shortcut.id, icon);
+    }, [onIconEmbedded, shortcut.id]);
+    const iconSrc = useIconSource(shortcut, handleIconEmbedded);
     const itemRef = useRef(null);
 
     useEffect(() => {
@@ -149,6 +152,21 @@ const FolderModal = ({ isOpen, onClose, folder, onUpdate, onDeleteItem, onMoveOu
     const isMobileRef = useRef(false);
 
     const children = Array.isArray(folder?.children) ? folder.children : [];
+
+    const handleIconEmbedded = useCallback((shortcutId, customIcon) => {
+        let changed = false;
+        const updatedChildren = children.map((shortcut) => {
+            const hasSameIcon = shortcut.customIcon?.type === customIcon.type &&
+                shortcut.customIcon?.data === customIcon.data &&
+                shortcut.customIcon?.letter === customIcon.letter &&
+                shortcut.customIcon?.source === customIcon.source;
+            if (shortcut.id !== shortcutId || hasSameIcon) return shortcut;
+            changed = true;
+            return { ...shortcut, customIcon };
+        });
+
+        if (changed) onUpdate?.({ ...folder, children: updatedChildren });
+    }, [children, folder, onUpdate]);
 
     useEffect(() => {
         isMobileRef.current = window.innerWidth <= 768;
@@ -295,6 +313,7 @@ const FolderModal = ({ isOpen, onClose, folder, onUpdate, onDeleteItem, onMoveOu
                                         setContextShortcutId={setContextShortcutId}
                                         onRemove={onDeleteItem}
                                         onEdit={onEditShortcut}
+                                        onIconEmbedded={handleIconEmbedded}
                                         isDraggable={true}
                                     />
                                 ))}

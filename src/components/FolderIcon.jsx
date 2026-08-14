@@ -1,8 +1,11 @@
 import { useIconSource } from '../hooks/useIconSource';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
-const MiniIcon = ({ item }) => {
-    const iconSrc = useIconSource(item);
+const MiniIcon = ({ item, onIconEmbedded }) => {
+    const handleIconEmbedded = useCallback((icon) => {
+        onIconEmbedded?.(item.id, icon);
+    }, [item.id, onIconEmbedded]);
+    const iconSrc = useIconSource(item, handleIconEmbedded);
 
     return (
         // pointer-events-none 确保点击能穿透到外层文件夹
@@ -28,7 +31,7 @@ const MiniIcon = ({ item }) => {
     );
 };
 
-const FolderIcon = ({ folder, iconSize }) => {
+const FolderIcon = ({ folder, iconSize, onIconEmbedded }) => {
     // 修复点 1：增加空值保护，防止 folder.children 为空时崩溃
     const previewItems = folder?.children?.slice(0, 9) || [];
     const folderRef = useRef(null);
@@ -67,7 +70,7 @@ const FolderIcon = ({ folder, iconSize }) => {
             <div className="glass-refraction pointer-events-none" />
             <div className={`w-full h-full grid ${gridCols} gap-1 content-center justify-items-center relative z-10`}>
                 {previewItems.map((item, index) => (
-                    <MiniIcon key={item.id || index} item={item} />
+                    <MiniIcon key={item.id || index} item={item} onIconEmbedded={onIconEmbedded} />
                 ))}
             </div>
         </div>

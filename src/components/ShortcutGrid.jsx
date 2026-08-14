@@ -137,8 +137,11 @@ const isPointInsideRect = (point, rect, insetRatio = 0.08) => {
         point.y <= rect.bottom - insetY;
 };
 
-const RegularShortcutIcon = ({ shortcut }) => {
-    const iconSrc = useIconSource(shortcut);
+const RegularShortcutIcon = ({ shortcut, onIconEmbedded }) => {
+    const handleIconEmbedded = useCallback((icon) => {
+        onIconEmbedded?.(shortcut.id, icon);
+    }, [onIconEmbedded, shortcut.id]);
+    const iconSrc = useIconSource(shortcut, handleIconEmbedded);
     const iconRef = useRef(null);
 
     useEffect(() => {
@@ -197,16 +200,16 @@ const RegularShortcutIcon = ({ shortcut }) => {
     );
 };
 
-const ShortcutIcon = ({ shortcut, iconSize, isContextOpen, isEditMode = false, onRemove, onEdit, setContextShortcutId }) => {
+const ShortcutIcon = ({ shortcut, iconSize, isContextOpen, isEditMode = false, onRemove, onEdit, setContextShortcutId, onIconEmbedded }) => {
     return (
         <div
             className="relative"
             style={{ width: `${iconSize}px`, height: `${iconSize}px` }}
         >
             {shortcut.type === 'folder' ? (
-                <FolderIcon folder={shortcut} iconSize={iconSize} />
+                <FolderIcon folder={shortcut} iconSize={iconSize} onIconEmbedded={onIconEmbedded} />
             ) : (
-                <RegularShortcutIcon shortcut={shortcut} />
+                <RegularShortcutIcon shortcut={shortcut} onIconEmbedded={onIconEmbedded} />
             )}
 
             {isContextOpen && (
@@ -310,7 +313,8 @@ const SortableShortcutItem = ({
                                   isMergeTarget,
                                   isDropCandidate,
                                   isEditing,
-                                  setIsEditing
+                                  setIsEditing,
+                                  onIconEmbedded
                               }) => {
     const {
         attributes,
@@ -401,6 +405,7 @@ const SortableShortcutItem = ({
                     onEdit={setEditingShortcut}
                     setContextShortcutId={setContextShortcutId}
                     isEditMode={false}
+                    onIconEmbedded={onIconEmbedded}
                 />
                 {isMergeTarget && (
                     <div
@@ -477,6 +482,37 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
         }
         return null;
     }, [shortcuts]);
+
+    const handleIconEmbedded = useCallback((shortcutId, customIcon) => {
+        let changed = false;
+        const hasSameIcon = (icon) => icon?.type === customIcon.type &&
+            icon?.data === customIcon.data &&
+            icon?.letter === customIcon.letter &&
+            icon?.source === customIcon.source;
+
+        const updatedShortcuts = shortcuts.map((shortcut) => {
+            if (shortcut.id === shortcutId) {
+                if (hasSameIcon(shortcut.customIcon)) return shortcut;
+                changed = true;
+                return { ...shortcut, customIcon };
+            }
+
+            if (shortcut.type !== 'folder' || !Array.isArray(shortcut.children)) return shortcut;
+
+            let childChanged = false;
+            const children = shortcut.children.map((child) => {
+                if (child.id !== shortcutId || hasSameIcon(child.customIcon)) return child;
+                childChanged = true;
+                return { ...child, customIcon };
+            });
+
+            if (!childChanged) return shortcut;
+            changed = true;
+            return { ...shortcut, children };
+        });
+
+        if (changed) onReorder?.(updatedShortcuts);
+    }, [onReorder, shortcuts]);
 
     const getMergeState = useCallback((active, delta) => {
         if (!active) {
@@ -969,6 +1005,7 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
                                             setIsEditing={setIsEditing}
                                             isDropCandidate={dropCandidateId === shortcut.id}
                                             isMergeTarget={mergeTargetId === shortcut.id}
+                                            onIconEmbedded={handleIconEmbedded}
                                         />
                                     ))}
                                 </div>

@@ -1,109 +1,68 @@
-import { useState, useEffect } from 'react';
-import { getIconUrl, getAllIconUrls } from '../utils/icons';
+import { useState, useEffect, useRef } from 'react';
+import { getAllIconUrls } from '../utils/icons';
+import { fetchIconAsDataUrl } from '../utils/iconToDataUrl';
 
-export const useIconSource = (shortcut) => {
+const createLetterIcon = (shortcut) => ({
+    type: 'letter',
+    letter: (shortcut.title?.[0] || 'A').toUpperCase(),
+});
+
+// 首次成功获取在线图标后，通过 onIconEmbedded 回写为本地 base64 数据。
+export const useIconSource = (shortcut, onIconEmbedded) => {
     const [iconSrc, setIconSrc] = useState(null);
+    const onIconEmbeddedRef = useRef(onIconEmbedded);
+
+    useEffect(() => {
+        onIconEmbeddedRef.current = onIconEmbedded;
+    }, [onIconEmbedded]);
 
     useEffect(() => {
         let isMounted = true;
-        let blobUrl = null;
+
+        const persistIcon = (icon) => {
+            if (isMounted) onIconEmbeddedRef.current?.(icon);
+        };
 
         const load = async () => {
-            // 1. Custom Data (Base64) - No caching needed (already local)
             if (shortcut.customIcon?.type === 'custom') {
                 if (isMounted) setIconSrc(shortcut.customIcon.data);
                 return;
             }
 
-            // 2. Letter - No image source
             if (shortcut.customIcon?.type === 'letter') {
-                if (isMounted) setIconSrc(null);
-                return;
-            }
-
-            // 3. Network URL - If user has selected a specific icon, use it directly
-            if (shortcut.customIcon?.url) {
-                // User has explicitly chosen this icon, use it directly without probing
-                if (isMounted) setIconSrc(shortcut.customIcon.url);
-                return;
-            }
-
-            // 4. Auto-detect icon from URL - Try to find a working source
-            const candidates = getAllIconUrls(shortcut.url);
-
-            if (!candidates.length) {
                 if (isMounted) setIconSrc(false);
                 return;
             }
 
-            try {
-                const cache = await caches.open('icon-cache');
+            const candidates = shortcut.customIcon?.url
+                ? [{ source: shortcut.customIcon.source, url: shortcut.customIcon.url }]
+                : getAllIconUrls(shortcut.url);
 
-                // First pass: Check cache for any candidate
-                for (const candidate of candidates) {
-                    try {
-                        const cachedResponse = await cache.match(candidate.url);
-                        if (cachedResponse && cachedResponse.ok && cachedResponse.type !== 'opaque') {
-                            const blob = await cachedResponse.blob();
-                            if (blob.size > 0) {
-                                blobUrl = URL.createObjectURL(blob);
-                                if (isMounted) setIconSrc(blobUrl);
-                                return;
-                            }
-                        }
-                    } catch (e) {
-                        // Continue to next candidate
-                    }
+            for (const candidate of candidates) {
+                try {
+                    const dataUrl = await fetchIconAsDataUrl(candidate.url);
+                    if (!isMounted) return;
+
+                    setIconSrc(dataUrl);
+                    persistIcon({ type: 'custom', data: dataUrl, source: candidate.source });
+                    return;
+                } catch {
+                    // 继续尝试下一个在线图标来源。
                 }
-                
-                // Second pass: Probe live URLs
-                for (const candidate of candidates) {
-                    try {
-                        // Probe with Image object to avoid CORS errors on 404s
-                        await new Promise((resolve, reject) => {
-                            const img = new Image();
-                            img.onload = resolve;
-                            img.onerror = reject;
-                            img.src = candidate.url;
-                        });
+            }
 
-                        // If we get here, the image exists and loaded
-                        if (isMounted) setIconSrc(candidate.url);
-                        
-                        // Try to cache it for next time
-                        try {
-                            // Skip caching for Google URLs to avoid CORS errors
-                            // Google favicons don't support CORS, so fetch/cache.add will fail
-                            if (!candidate.url.includes('google.com/s2/favicons')) {
-                                await cache.add(candidate.url);
-                            }
-                        } catch (e) {
-                            // If CORS fails but image loaded, we just can't cache it.
-                            // This is acceptable.
-                        }
-                        return; // Found a working one
-                    } catch (e) {
-                        // Probe failed (404 or network error), try next candidate
-                        continue;
-                    }
-                }
-
-                // If all failed
-                if (isMounted) setIconSrc(false);
-
-            } catch (error) {
-                console.warn('Icon loading failed:', error);
-                // Fallback to primary URL if everything explodes, or false?
-                // Better to fail gracefully to letter
-                if (isMounted) setIconSrc(false);
+            if (isMounted) {
+                setIconSrc(false);
+                // 失败结果也落盘，防止之后每次打开 iTabs 都重新联网探测。
+                persistIcon(createLetterIcon(shortcut));
             }
         };
 
+        setIconSrc(null);
         load();
 
         return () => {
             isMounted = false;
-            if (blobUrl) URL.revokeObjectURL(blobUrl);
         };
     }, [shortcut]);
 
