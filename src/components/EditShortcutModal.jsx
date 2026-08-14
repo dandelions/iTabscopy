@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import IconSelector from './IconSelector';
+import { tryEmbedIcon } from '../utils/iconToDataUrl';
 
 const EditShortcutModal = ({ isOpen, onClose, shortcut, onSave }) => {
     const [url, setUrl] = useState('');
@@ -31,7 +32,7 @@ const EditShortcutModal = ({ isOpen, onClose, shortcut, onSave }) => {
         return value.startsWith('http') ? value : `https://${value}`;
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
 
         // 文件夹不需要 URL，普通快捷方式需要
@@ -81,6 +82,7 @@ const EditShortcutModal = ({ isOpen, onClose, shortcut, onSave }) => {
                     letter: firstChar.toUpperCase()
                 };
             }
+            finalIcon = await tryEmbedIcon(finalIcon, finalTitle);
 
             onSave({
                 ...shortcut,
@@ -90,7 +92,7 @@ const EditShortcutModal = ({ isOpen, onClose, shortcut, onSave }) => {
                 iconPadding: iconPadding
             });
             onClose();
-        } catch (err) {
+        } catch {
             alert('无效的 URL');
         }
     };

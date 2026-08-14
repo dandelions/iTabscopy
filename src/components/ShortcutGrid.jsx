@@ -63,8 +63,8 @@ const calculateGaps = (cols, rows, screenWidth, iconSize, leftOffset = 0) => {
     return { colGap, rowGap };
 };
 
-const MERGE_PREVIEW_RATIO = 0.06;
-const MERGE_CONFIRM_RATIO = 0.22;
+const MERGE_PREVIEW_RATIO = 0.01;
+const MERGE_CONFIRM_RATIO = 0.15;
 
 const getShortcutElement = (id) => {
     const idString = String(id);
@@ -490,18 +490,29 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
         }
 
         const activeRect = getDragRect(active, delta);
-        const overRect = toComparableRect(over.rect) || toComparableRect(getShortcutElement(over.id)?.getBoundingClientRect());
+        // 排序策略会临时 transform 目标元素；优先使用当前 DOM 矩形保证桌面端命中准确。
+        const overRect = toComparableRect(getShortcutElement(over.id)?.getBoundingClientRect()) || toComparableRect(over.rect);
+        if (!overRect) {
+            return { dropCandidateId: null, mergeTargetId: null };
+        }
         const ratio = getIntersectionRatio(activeRect, overRect);
         const activeCenter = getRectCenter(activeRect);
         const isCenteredOnTarget = isPointInsideRect(activeCenter, overRect);
 
-        if (ratio < MERGE_PREVIEW_RATIO && !isCenteredOnTarget) {
+        // 扩大合并检测范围：中心点距离目标中心很近时也视为合并候选
+        const overCenter = getRectCenter(overRect);
+        const distX = Math.abs((activeCenter?.x || 0) - (overCenter?.x || 0));
+        const distY = Math.abs((activeCenter?.y || 0) - (overCenter?.y || 0));
+        const centerDistance = Math.sqrt(distX * distX + distY * distY);
+        const isNearTarget = activeCenter && overCenter && centerDistance <= Math.max(overRect.width, overRect.height) * 1.2;
+
+        if (ratio < MERGE_PREVIEW_RATIO && !isCenteredOnTarget && !isNearTarget) {
             return { dropCandidateId: null, mergeTargetId: null };
         }
 
         return {
             dropCandidateId: over.id,
-            mergeTargetId: ratio >= MERGE_CONFIRM_RATIO || isCenteredOnTarget ? over.id : null,
+            mergeTargetId: (ratio >= MERGE_CONFIRM_RATIO || isCenteredOnTarget || isNearTarget) ? over.id : null,
         };
     }, [shortcuts]);
 

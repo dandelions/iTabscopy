@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Upload, Check } from 'lucide-react';
 import { getAllIconUrls } from '../utils/icons';
+import { fetchIconAsDataUrl } from '../utils/iconToDataUrl';
 
 const IconSelector = ({ url, title, onSelect, selectedIcon }) => {
     const [iconPreviews, setIconPreviews] = useState([]);
@@ -32,7 +33,7 @@ const IconSelector = ({ url, title, onSelect, selectedIcon }) => {
     useEffect(() => {
         if (selectedIcon?.type === 'custom') {
             setCustomIcon(selectedIcon.data || null);
-            setSelectedSource('custom');
+            setSelectedSource(selectedIcon.source || 'custom');
         } else if (selectedIcon?.type === 'letter') {
             setCustomIcon(null);
             setSelectedSource('letter');
@@ -98,14 +99,31 @@ const IconSelector = ({ url, title, onSelect, selectedIcon }) => {
         return () => { abort = true; };
     }, [url]); // Only depend on url, not initialLetterIcon
 
-    const handleIconSelect = (source, iconUrl) => {
+    const handleIconSelect = async (source, iconUrl) => {
         setSelectedSource(source);
         setCustomIcon(null);
         if (source === 'letter') {
             onSelect({ type: 'letter', letter: iconUrl });
-        } else {
-            onSelect({ type: 'source', source, url: iconUrl });
+            return;
         }
+
+        // 网络图标：尝试下载并转为 base64 保存为本地图片，避免依赖远程链接
+        try {
+            const dataUrl = await fetchIconAsDataUrl(iconUrl);
+            if (dataUrl) {
+                onSelect({ type: 'custom', data: dataUrl, source });
+                setSelectedSource(source);
+                setCustomIcon(dataUrl);
+                return;
+            }
+        } catch (error) {
+            console.warn('Failed to embed icon, using a letter icon instead:', error);
+        }
+
+        // 不将图标链接写入快捷方式或同步数据。
+        const letter = (title?.trim()?.[0] || 'A').toUpperCase();
+        setSelectedSource('letter');
+        onSelect({ type: 'letter', letter });
     };
 
     const handleCustomUpload = (e) => {

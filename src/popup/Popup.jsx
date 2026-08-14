@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Check, X } from 'lucide-react';
 import IconSelector from '../components/IconSelector';
 import syncService from '../services/syncService';
+import { tryEmbedIcon } from '../utils/iconToDataUrl';
 
 const Popup = () => {
     const [url, setUrl] = useState('');
@@ -46,12 +47,15 @@ const Popup = () => {
         setSaving(true);
 
         try {
+            // 尝试将 URL 图标转为 base64 本地图片，便于跨设备同步
+            const embeddedIcon = await tryEmbedIcon(customIcon, title);
+
             // Create new shortcut
             const newShortcut = {
                 id: Date.now(),
                 url: url,
                 title: title,
-                customIcon: customIcon,
+                customIcon: embeddedIcon,
                 iconPadding: iconPadding
             };
 
