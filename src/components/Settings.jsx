@@ -647,13 +647,42 @@ const LoginForm = ({ onLogin, showToast, onSyncPull, onSyncPush }) => {
     const [pendingLoginEmail, setPendingLoginEmail] = useState(null);
     const [isResolvingDataChoice, setIsResolvingDataChoice] = useState(false);
 
+    const isDefaultShortcuts = (list) => {
+        if (!Array.isArray(list) || list.length !== 1) return false;
+        const item = list[0];
+        const title = (item?.title || '').toLowerCase();
+        const url = item?.url || '';
+        return title === 'google' && (url.startsWith('https://google.com') || url.startsWith('http://google.com'));
+    };
+
     const hasLocalData = () => {
-        const shortcuts = localStorage.getItem('shortcuts');
-        const todos = localStorage.getItem('todos');
-        const notes = localStorage.getItem('notes');
-        return (shortcuts && JSON.parse(shortcuts).length > 0) ||
-               (todos && JSON.parse(todos).length > 0) ||
-               (notes && JSON.parse(notes).length > 0);
+        let shortcuts = [];
+        let todos = [];
+        let notes = [];
+
+        try {
+            const rawShortcuts = localStorage.getItem('shortcuts');
+            if (rawShortcuts) shortcuts = JSON.parse(rawShortcuts);
+        } catch {}
+
+        try {
+            const rawTodos = localStorage.getItem('todos');
+            if (rawTodos) todos = JSON.parse(rawTodos);
+        } catch {}
+
+        try {
+            const rawNotes = localStorage.getItem('notes');
+            if (rawNotes) notes = JSON.parse(rawNotes);
+        } catch {}
+
+        // 如果用户有添加待办或笔记，属于真实本地数据
+        if (todos.length > 0 || notes.length > 0) return true;
+        // 如果快捷方式不存在或为空，无用户数据
+        if (!shortcuts || shortcuts.length === 0) return false;
+        // 如果快捷方式多于 1 个，属于用户数据
+        if (shortcuts.length > 1) return true;
+        // 只有 1 个快捷方式时，判断是否为插件安装时默认初始化的 Google
+        return !isDefaultShortcuts(shortcuts);
     };
 
     const getLocalSyncData = () => ({
@@ -766,19 +795,27 @@ const LoginForm = ({ onLogin, showToast, onSyncPull, onSyncPush }) => {
                     throw new Error('同步入口不可用，请刷新后重试');
                 }
 
+                // 确保在拉取和状态替换期间锁定自动推送，杜绝旧本地数据反向覆盖云端
+                localStorage.setItem(SYNC_AUTO_PUSH_BLOCKED_KEY, '1');
+
                 const applied = await onSyncPull({ forceApply: true, throwOnError: true });
                 if (!applied) {
                     throw new Error('未能从云端应用数据，请检查网络或云端数据后重试');
                 }
 
-                localStorage.removeItem(SYNC_AUTO_PUSH_BLOCKED_KEY);
                 setShowDataConflict(false);
                 showToast('已使用云端数据覆盖本地', 'success');
                 if (pendingLoginEmail) {
                     onLogin(pendingLoginEmail);
                     setPendingLoginEmail(null);
                 }
+
+                // 延迟解除自动推送阻塞，确保数据完全稳定
+                setTimeout(() => {
+                    localStorage.removeItem(SYNC_AUTO_PUSH_BLOCKED_KEY);
+                }, 800);
             } catch (error) {
+                localStorage.removeItem(SYNC_AUTO_PUSH_BLOCKED_KEY);
                 showToast('使用云端数据失败: ' + error.message, 'error');
             } finally {
                 setIsResolvingDataChoice(false);
@@ -854,14 +891,16 @@ const LoginForm = ({ onLogin, showToast, onSyncPull, onSyncPush }) => {
                         localStorage.removeItem(SYNC_AUTO_PUSH_BLOCKED_KEY);
                     }
                 } else {
-                    // No local data, pull from cloud
+                    // No local user data, pull from cloud directly
                     if (onSyncPull) {
                         const applied = await onSyncPull({ forceApply: true, throwOnError: true });
                         if (!applied) {
                             throw new Error('未能从云端应用数据，请检查网络或云端数据后重试');
                         }
                     }
-                    localStorage.removeItem(SYNC_AUTO_PUSH_BLOCKED_KEY);
+                    setTimeout(() => {
+                        localStorage.removeItem(SYNC_AUTO_PUSH_BLOCKED_KEY);
+                    }, 800);
                 }
                 onLogin(email);
             }

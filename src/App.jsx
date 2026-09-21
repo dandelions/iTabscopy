@@ -136,14 +136,12 @@ function App() {
   }, [isLoggedIn]);
 
   const isPristineDefaultData = useCallback(() => {
-    const hasLocalUpdate = localStorage.getItem('last_local_update') !== null;
-    return !hasLocalUpdate &&
-        shortcuts.length === 1 &&
-        shortcuts[0]?.id === 1 &&
-        shortcuts[0]?.title === 'Google' &&
-        shortcuts[0]?.url === 'https://google.com' &&
-        todos.length === 0 &&
-        notes.length === 0;
+    if (todos.length > 0 || notes.length > 0) return false;
+    if (!Array.isArray(shortcuts) || shortcuts.length !== 1) return false;
+    const first = shortcuts[0];
+    const title = (first?.title || '').toLowerCase();
+    const url = first?.url || '';
+    return title === 'google' && (url.startsWith('https://google.com') || url.startsWith('http://google.com'));
   }, [shortcuts, todos, notes]);
 
   const updateLocalTimestamp = () => {
@@ -212,9 +210,11 @@ function App() {
 
       const lastLocalUpdate = readStoredTimestamp(LAST_LOCAL_UPDATE_KEY);
       const cloudUpdatedAt = Number.isFinite(Number(cloudData.updatedAt)) ? Number(cloudData.updatedAt) : null;
+      const isDefault = isPristineDefaultData();
 
-      const shouldApplyCloud = forceApply || !lastLocalUpdate || (cloudUpdatedAt && cloudUpdatedAt > lastLocalUpdate);
-      const shouldPushLocal = !forceApply && lastLocalUpdate && (!cloudUpdatedAt || lastLocalUpdate > cloudUpdatedAt);
+      // 如果本地仅有默认占位数据，必须无条件应用云端数据，绝对禁止推送到云端覆盖远程
+      const shouldApplyCloud = forceApply || isDefault || !lastLocalUpdate || (cloudUpdatedAt && cloudUpdatedAt > lastLocalUpdate);
+      const shouldPushLocal = !forceApply && !isDefault && lastLocalUpdate && (!cloudUpdatedAt || lastLocalUpdate > cloudUpdatedAt);
       let updated = false;
 
       if (shouldApplyCloud) {
@@ -262,6 +262,8 @@ function App() {
 
         if (updated) {
           markCloudVersionSynced(cloudUpdatedAt || Date.now(), appliedData);
+          currentSyncDataRef.current = appliedData;
+          lastPushedSnapshotRef.current = createSyncSnapshot(appliedData);
         }
 
         setTimeout(() => { isPullingRef.current = false; }, 100);
@@ -396,6 +398,12 @@ function App() {
     setShortcuts(newShortcuts);
     localStorage.setItem('shortcuts', JSON.stringify(newShortcuts));
     updateLocalTimestamp();
+  };
+
+  const handleShortcutIconEmbedded = (newShortcuts) => {
+    setShortcuts(newShortcuts);
+    localStorage.setItem('shortcuts', JSON.stringify(newShortcuts));
+    // 图标内嵌仅为本地资源缓存，不调用 updateLocalTimestamp()，防止污染同步时间戳基准
   };
 
   const handleBgConfigChange = (newConfig) => {
@@ -743,7 +751,15 @@ function App() {
               </div>
           )}
 
-          <ShortcutGrid config={gridConfig} shortcuts={shortcuts} onRemoveShortcut={handleRemoveShortcut} onEditShortcut={handleEditShortcut} onReorder={handleReorderShortcuts} leftOffset={0} />
+          <ShortcutGrid
+            config={gridConfig}
+            shortcuts={shortcuts}
+            onRemoveShortcut={handleRemoveShortcut}
+            onEditShortcut={handleEditShortcut}
+            onReorder={handleReorderShortcuts}
+            onIconPersisted={handleShortcutIconEmbedded}
+            leftOffset={0}
+          />
         </div>
         {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       </Layout>

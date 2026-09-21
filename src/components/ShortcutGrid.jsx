@@ -432,7 +432,7 @@ const SortableShortcutItem = ({
     );
 };
 
-const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onReorder, leftOffset = 0 }) => {
+const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onReorder, onIconPersisted, leftOffset = 0 }) => {
     const { cols = 4, rows = 4, iconSize = 50 } = config || {};
     const [currentPage, setCurrentPage] = useState(0);
     const [isEditing, setIsEditing] = useState(false);
@@ -516,8 +516,14 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
             return { ...shortcut, children };
         });
 
-        if (changed) onReorder?.(updatedShortcuts);
-    }, [onReorder, shortcuts]);
+        if (changed) {
+            if (onIconPersisted) {
+                onIconPersisted(updatedShortcuts);
+            } else {
+                onReorder?.(updatedShortcuts);
+            }
+        }
+    }, [onIconPersisted, onReorder, shortcuts]);
 
     const getMergeState = useCallback((active, delta) => {
         if (!active) {
