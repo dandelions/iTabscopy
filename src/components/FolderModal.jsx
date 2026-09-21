@@ -9,6 +9,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useIconSource } from '../hooks/useIconSource';
+import IconOriginBadge from './IconOriginBadge';
 
 // --- 内部图标项组件 ---
 const SortableItem = ({ shortcut, onRemove, onEdit, onIconEmbedded, isContextOpen, setContextShortcutId, isDraggable = true }) => {
@@ -91,6 +92,10 @@ const SortableItem = ({ shortcut, onRemove, onEdit, onIconEmbedded, isContextOpe
                         iconSrc && <img src={iconSrc} alt="" className="w-4/5 h-4/5 object-contain rounded-lg" draggable={false} />
                     )}
                 </div>
+
+                {!isContextOpen && (
+                    <IconOriginBadge shortcut={shortcut} iconSize={64} />
+                )}
 
                 {/* 悬浮控制层需要恢复指针交互 */}
                 {isContextOpen && (

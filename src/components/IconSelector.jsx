@@ -146,7 +146,7 @@ const IconSelector = ({ url, title, onSelect, selectedIcon }) => {
         reader.onloadend = () => {
             setCustomIcon(reader.result);
             setSelectedSource('custom');
-            onSelect({ type: 'custom', data: reader.result });
+            onSelect({ type: 'custom', data: reader.result, source: 'custom' });
         };
         reader.readAsDataURL(file);
     };

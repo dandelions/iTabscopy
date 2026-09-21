@@ -4,6 +4,7 @@ import { useIconSource } from '../hooks/useIconSource';
 import EditShortcutModal from './EditShortcutModal';
 import FolderIcon from './FolderIcon';
 import FolderModal from './FolderModal';
+import IconOriginBadge from './IconOriginBadge';
 import {
     DndContext,
     closestCenter,
@@ -210,6 +211,10 @@ const ShortcutIcon = ({ shortcut, iconSize, isContextOpen, isEditMode = false, o
                 <FolderIcon folder={shortcut} iconSize={iconSize} onIconEmbedded={onIconEmbedded} />
             ) : (
                 <RegularShortcutIcon shortcut={shortcut} onIconEmbedded={onIconEmbedded} />
+            )}
+
+            {!isContextOpen && (
+                <IconOriginBadge shortcut={shortcut} iconSize={iconSize} />
             )}
 
             {isContextOpen && (
