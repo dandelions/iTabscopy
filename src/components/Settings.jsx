@@ -261,6 +261,25 @@ const Settings = ({
                                                     </button>
                                                 </div>
                                             )}
+
+                                            {/* Show Icon Badge Toggle */}
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex flex-col">
+                                                    <label className="text-sm text-white/80">显示图标来源标识</label>
+                                                    <span className="text-xs text-white/40">在图标右下角显示在线/本地存储状态</span>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => onConfigChange({ showIconBadge: gridConfig.showIconBadge === false ? true : false })}
+                                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${gridConfig.showIconBadge !== false ? 'bg-blue-600' : 'bg-white/20'
+                                                        }`}
+                                                >
+                                                    <span
+                                                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${gridConfig.showIconBadge !== false ? 'translate-x-6' : 'translate-x-1'
+                                                            }`}
+                                                    />
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
 

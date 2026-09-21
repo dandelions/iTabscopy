@@ -201,7 +201,7 @@ const RegularShortcutIcon = ({ shortcut, onIconEmbedded }) => {
     );
 };
 
-const ShortcutIcon = ({ shortcut, iconSize, isContextOpen, isEditMode = false, onRemove, onEdit, setContextShortcutId, onIconEmbedded }) => {
+const ShortcutIcon = ({ shortcut, iconSize, isContextOpen, isEditMode = false, onRemove, onEdit, setContextShortcutId, onIconEmbedded, showIconBadge = true }) => {
     return (
         <div
             className="relative"
@@ -214,7 +214,7 @@ const ShortcutIcon = ({ shortcut, iconSize, isContextOpen, isEditMode = false, o
             )}
 
             {!isContextOpen && (
-                <IconOriginBadge shortcut={shortcut} iconSize={iconSize} />
+                <IconOriginBadge shortcut={shortcut} iconSize={iconSize} show={showIconBadge} />
             )}
 
             {isContextOpen && (
@@ -319,7 +319,8 @@ const SortableShortcutItem = ({
                                   isDropCandidate,
                                   isEditing,
                                   setIsEditing,
-                                  onIconEmbedded
+                                  onIconEmbedded,
+                                  showIconBadge = true
                               }) => {
     const {
         attributes,
@@ -411,6 +412,7 @@ const SortableShortcutItem = ({
                     setContextShortcutId={setContextShortcutId}
                     isEditMode={false}
                     onIconEmbedded={onIconEmbedded}
+                    showIconBadge={showIconBadge}
                 />
                 {isMergeTarget && (
                     <div
@@ -433,7 +435,7 @@ const SortableShortcutItem = ({
 };
 
 const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onReorder, onIconPersisted, leftOffset = 0 }) => {
-    const { cols = 4, rows = 4, iconSize = 50 } = config || {};
+    const { cols = 4, rows = 4, iconSize = 50, showIconBadge = true } = config || {};
     const [currentPage, setCurrentPage] = useState(0);
     const [isEditing, setIsEditing] = useState(false);
     const [contextShortcutId, setContextShortcutId] = useState(null);
@@ -1017,6 +1019,7 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
                                             isDropCandidate={dropCandidateId === shortcut.id}
                                             isMergeTarget={mergeTargetId === shortcut.id}
                                             onIconEmbedded={handleIconEmbedded}
+                                            showIconBadge={showIconBadge}
                                         />
                                     ))}
                                 </div>
@@ -1035,6 +1038,7 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
                                 iconSize={iconSize}
                                 isContextOpen={false}
                                 isEditMode={false}
+                                showIconBadge={showIconBadge}
                             />
                             <span className="text-sm font-medium text-white/90 drop-shadow-md truncate w-full text-center px-1 select-none">
                                  {activeNodeShortcut.title}
@@ -1129,6 +1133,7 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
                 onDeleteItem={handleFolderItemDelete}
                 onMoveOut={handleFolderItemMoveOut}
                 onEditShortcut={setEditingShortcut}
+                showIconBadge={showIconBadge}
             />
         </DndContext>
     );

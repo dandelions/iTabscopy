@@ -1,7 +1,8 @@
 import { Globe, HardDrive } from 'lucide-react';
 import { isOfflineIcon, getIconOriginLabel } from '../utils/icons';
 
-const IconOriginBadge = ({ shortcut, iconSize = 50, className = '' }) => {
+const IconOriginBadge = ({ shortcut, iconSize = 50, className = '', show = true }) => {
+    if (!show) return null;
     if (!shortcut || shortcut.type === 'folder') return null;
 
     const isOffline = isOfflineIcon(shortcut);

@@ -12,7 +12,7 @@ import { useIconSource } from '../hooks/useIconSource';
 import IconOriginBadge from './IconOriginBadge';
 
 // --- 内部图标项组件 ---
-const SortableItem = ({ shortcut, onRemove, onEdit, onIconEmbedded, isContextOpen, setContextShortcutId, isDraggable = true }) => {
+const SortableItem = ({ shortcut, onRemove, onEdit, onIconEmbedded, isContextOpen, setContextShortcutId, isDraggable = true, showIconBadge = true }) => {
     const {
         attributes,
         listeners,
@@ -94,7 +94,7 @@ const SortableItem = ({ shortcut, onRemove, onEdit, onIconEmbedded, isContextOpe
                 </div>
 
                 {!isContextOpen && (
-                    <IconOriginBadge shortcut={shortcut} iconSize={64} />
+                    <IconOriginBadge shortcut={shortcut} iconSize={64} show={showIconBadge} />
                 )}
 
                 {/* 悬浮控制层需要恢复指针交互 */}
@@ -149,7 +149,7 @@ const OutsideDroppable = ({ children, onClose, isVisible }) => {
 };
 
 // --- 主组件 ---
-const FolderModal = ({ isOpen, onClose, folder, onUpdate, onDeleteItem, onMoveOut, onEditShortcut }) => {
+const FolderModal = ({ isOpen, onClose, folder, onUpdate, onDeleteItem, onMoveOut, onEditShortcut, showIconBadge = true }) => {
     const [contextShortcutId, setContextShortcutId] = useState(null);
     const gridRef = useRef(null);
     const modalRef = useRef(null);
@@ -320,6 +320,7 @@ const FolderModal = ({ isOpen, onClose, folder, onUpdate, onDeleteItem, onMoveOu
                                         onEdit={onEditShortcut}
                                         onIconEmbedded={handleIconEmbedded}
                                         isDraggable={true}
+                                        showIconBadge={showIconBadge}
                                     />
                                 ))}
                             </SortableContext>
