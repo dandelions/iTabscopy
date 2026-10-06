@@ -187,6 +187,7 @@ class SyncService {
         localStorage.removeItem('sync_token');
         localStorage.removeItem('sync_email');
         localStorage.removeItem('last_sync');
+        localStorage.removeItem('sync_auto_push_blocked');
     }
 
     // Pull data from server
@@ -236,12 +237,18 @@ class SyncService {
         }
 
         const optionBaseUpdatedAt = Number(options.baseUpdatedAt);
-        const storedBaseUpdatedAt = readStoredTimestamp(LAST_CLOUD_UPDATE_KEY) || readStoredTimestamp(LAST_LOCAL_UPDATE_KEY);
+        const storedBaseUpdatedAt = readStoredTimestamp(LAST_CLOUD_UPDATE_KEY);
         const baseUpdatedAt = Number.isFinite(optionBaseUpdatedAt) ? optionBaseUpdatedAt : storedBaseUpdatedAt;
         const optionUpdatedAt = Number(options.updatedAt);
+        const latestKnownTimestamp = Math.max(
+            readStoredTimestamp(LAST_CLOUD_UPDATE_KEY) || 0,
+            readStoredTimestamp(LAST_LOCAL_UPDATE_KEY) || 0,
+            Number.isFinite(baseUpdatedAt) ? baseUpdatedAt + 1 : 0
+        );
+        const defaultUpdatedAt = Math.max(Date.now(), latestKnownTimestamp);
         const syncData = {
             ...data,
-            updatedAt: Number.isFinite(optionUpdatedAt) ? optionUpdatedAt : Date.now(),
+            updatedAt: Number.isFinite(optionUpdatedAt) ? optionUpdatedAt : defaultUpdatedAt,
         };
         if (!options.force && Number.isFinite(baseUpdatedAt)) {
             syncData.baseUpdatedAt = baseUpdatedAt;
@@ -268,7 +275,10 @@ class SyncService {
         const updatedAt = Number(result.updatedAt || syncData.updatedAt);
         if (Number.isFinite(updatedAt)) {
             localStorage.setItem(LAST_CLOUD_UPDATE_KEY, String(updatedAt));
-            localStorage.setItem(LAST_LOCAL_UPDATE_KEY, String(updatedAt));
+            const currentLocalUpdate = readStoredTimestamp(LAST_LOCAL_UPDATE_KEY);
+            if (!currentLocalUpdate || currentLocalUpdate < updatedAt) {
+                localStorage.setItem(LAST_LOCAL_UPDATE_KEY, String(updatedAt));
+            }
         }
         localStorage.setItem(LAST_SYNCED_SNAPSHOT_KEY, createSyncSnapshot(syncData));
         localStorage.setItem('last_sync', String(Date.now()));

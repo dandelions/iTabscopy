@@ -123,8 +123,9 @@ function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(syncService.isLoggedIn());
 
   const isPullingRef = useRef(false);
+  const isPushingRef = useRef(false);
   const lastPushedSnapshotRef = useRef('');
-  const currentSyncDataRef = useRef(null);
+  const currentSyncDataRef = useRef({ shortcuts, gridConfig, bgConfig, bgUrl, todos, notes });
   const hasCompletedInitialPullRef = useRef(!syncService.isLoggedIn());
 
   useEffect(() => {
@@ -132,42 +133,70 @@ function App() {
   }, [shortcuts, gridConfig, bgConfig, bgUrl, todos, notes]);
 
   useEffect(() => {
-    hasCompletedInitialPullRef.current = !isLoggedIn;
+    if (!isLoggedIn) {
+      hasCompletedInitialPullRef.current = true;
+    }
   }, [isLoggedIn]);
 
-  const isPristineDefaultData = useCallback(() => {
-    if (todos.length > 0 || notes.length > 0) return false;
-    if (!Array.isArray(shortcuts) || shortcuts.length !== 1) return false;
-    const first = shortcuts[0];
+  const isPristineDefaultData = useCallback((targetData = null) => {
+    // 如果曾经与云端同步过，则本地数据不再视作“全新安装的未同步默认占位数据”
+    if (
+      localStorage.getItem(LAST_SYNCED_SNAPSHOT_KEY) !== null ||
+      readStoredTimestamp(LAST_CLOUD_UPDATE_KEY) !== null
+    ) {
+      return false;
+    }
+
+    const source = targetData || currentSyncDataRef.current || {};
+    const sourceTodos = Array.isArray(source.todos) ? source.todos : [];
+    const sourceNotes = Array.isArray(source.notes) ? source.notes : [];
+    const sourceShortcuts = Array.isArray(source.shortcuts) ? source.shortcuts : [];
+
+    if (sourceTodos.length > 0 || sourceNotes.length > 0) return false;
+    if (sourceShortcuts.length !== 1) return false;
+    const first = sourceShortcuts[0];
     const title = (first?.title || '').toLowerCase();
     const url = first?.url || '';
     return title === 'google' && (url.startsWith('https://google.com') || url.startsWith('http://google.com'));
-  }, [shortcuts, todos, notes]);
+  }, []);
 
   const updateLocalTimestamp = () => {
-    localStorage.setItem(LAST_LOCAL_UPDATE_KEY, String(Date.now()));
+    const lastCloudUpdate = readStoredTimestamp(LAST_CLOUD_UPDATE_KEY) || 0;
+    const lastLocalUpdate = readStoredTimestamp(LAST_LOCAL_UPDATE_KEY) || 0;
+    const nextTimestamp = Math.max(Date.now(), lastCloudUpdate + 1, lastLocalUpdate + 1);
+    localStorage.setItem(LAST_LOCAL_UPDATE_KEY, String(nextTimestamp));
+    localStorage.removeItem(SYNC_AUTO_PUSH_BLOCKED_KEY);
+    return nextTimestamp;
   };
 
   const markCloudVersionSynced = useCallback((updatedAt, syncedData) => {
     const timestamp = Number(updatedAt);
+    const syncedSnapshot = syncedData ? createSyncSnapshot(syncedData) : null;
+    if (syncedSnapshot !== null) {
+      localStorage.setItem(LAST_SYNCED_SNAPSHOT_KEY, syncedSnapshot);
+    }
     if (Number.isFinite(timestamp)) {
       localStorage.setItem(LAST_CLOUD_UPDATE_KEY, String(timestamp));
-      localStorage.setItem(LAST_LOCAL_UPDATE_KEY, String(timestamp));
-    }
-    if (syncedData) {
-      localStorage.setItem(LAST_SYNCED_SNAPSHOT_KEY, createSyncSnapshot(syncedData));
+      const currentSnapshot = currentSyncDataRef.current ? createSyncSnapshot(currentSyncDataRef.current) : null;
+      const hasNewerLocalData = syncedSnapshot !== null && currentSnapshot !== null && currentSnapshot !== syncedSnapshot;
+      const currentLocalTimestamp = readStoredTimestamp(LAST_LOCAL_UPDATE_KEY) || 0;
+      const nextLocalTimestamp = hasNewerLocalData
+        ? Math.max(currentLocalTimestamp, timestamp + 1)
+        : Math.max(currentLocalTimestamp, timestamp);
+      localStorage.setItem(LAST_LOCAL_UPDATE_KEY, String(nextLocalTimestamp));
     }
   }, []);
 
-  const hasPendingLocalChanges = useCallback(() => {
+  const hasPendingLocalChanges = useCallback((targetData = null) => {
+    const dataToCheck = targetData || currentSyncDataRef.current;
     const syncedSnapshot = localStorage.getItem(LAST_SYNCED_SNAPSHOT_KEY);
     if (syncedSnapshot !== null) {
-      return createSyncSnapshot(currentSyncDataRef.current) !== syncedSnapshot;
+      return createSyncSnapshot(dataToCheck) !== syncedSnapshot;
     }
 
     const lastLocalUpdate = readStoredTimestamp(LAST_LOCAL_UPDATE_KEY);
     const lastCloudUpdate = readStoredTimestamp(LAST_CLOUD_UPDATE_KEY);
-    return Boolean(lastLocalUpdate && lastCloudUpdate && lastLocalUpdate > lastCloudUpdate);
+    return Boolean(lastLocalUpdate && (!lastCloudUpdate || lastLocalUpdate > lastCloudUpdate));
   }, []);
 
   const createBackupData = useCallback(() => syncService.createBackupData({
@@ -180,6 +209,7 @@ function App() {
   }), [todos, notes, shortcuts, gridConfig, bgConfig, bgUrl]);
 
   useEffect(() => {
+    localStorage.removeItem(SYNC_AUTO_PUSH_BLOCKED_KEY);
     const raw = localStorage.getItem('last_local_update');
     if (raw !== null) {
       const numeric = Number(raw);
@@ -194,31 +224,95 @@ function App() {
     }
   }, []);
 
+  const pushLocalToCloud = useCallback(async (dataOverride = null, options = {}) => {
+    if (!syncService.isLoggedIn()) throw new Error('Not logged in');
+    const data = dataOverride || currentSyncDataRef.current;
+    const force = options.force !== false;
+    const baseUpdatedAt = options.baseUpdatedAt;
+
+    const markSynced = (result, syncedData, requestedUpdatedAt) => {
+      const updatedAt = Number(result?.updatedAt || requestedUpdatedAt || Date.now());
+      markCloudVersionSynced(updatedAt, syncedData);
+      lastPushedSnapshotRef.current = createSyncSnapshot(syncedData);
+      hasCompletedInitialPullRef.current = true;
+      localStorage.removeItem(SYNC_AUTO_PUSH_BLOCKED_KEY);
+      return result;
+    };
+
+    isPushingRef.current = true;
+    try {
+      const result = await syncService.pushData(data, { force, baseUpdatedAt });
+      if (!result) throw new Error('当前离线，无法同步到云端');
+      return markSynced(result, data);
+    } catch (error) {
+      const currentUpdatedAt = Number(error?.currentUpdatedAt);
+      if (!error?.isSyncConflict || !Number.isFinite(currentUpdatedAt)) {
+        throw error;
+      }
+
+      const latestData = dataOverride || currentSyncDataRef.current || data;
+      const updatedAt = Math.max(Date.now(), currentUpdatedAt + 1);
+      const result = await syncService.pushData(latestData, {
+        baseUpdatedAt: currentUpdatedAt,
+        updatedAt,
+      });
+      if (!result) throw new Error('当前离线，无法同步到云端');
+      return markSynced(result, latestData, updatedAt);
+    } finally {
+      isPushingRef.current = false;
+    }
+  }, [markCloudVersionSynced]);
+
   const pullFromCloud = useCallback(async (options = {}) => {
     const { forceApply = false, throwOnError = false } = options;
     if (!syncService.isLoggedIn()) return false;
     if (!syncService.isOnline()) return false;
+    if (!forceApply && (isPullingRef.current || isPushingRef.current)) return false;
 
     try {
       isPullingRef.current = true;
+      const snapshotBeforePull = createSyncSnapshot(currentSyncDataRef.current);
+      const localUpdateBeforePull = readStoredTimestamp(LAST_LOCAL_UPDATE_KEY);
       const cloudData = await syncService.pullData();
+
+      const currentData = currentSyncDataRef.current;
+      const lastLocalUpdate = readStoredTimestamp(LAST_LOCAL_UPDATE_KEY);
+      const isDefault = isPristineDefaultData(currentData);
+      const pendingLocal = hasPendingLocalChanges(currentData);
+      const modifiedDuringPull =
+        createSyncSnapshot(currentData) !== snapshotBeforePull ||
+        lastLocalUpdate !== localUpdateBeforePull;
+
       if (!cloudData) {
+        if (!forceApply && !isDefault && lastLocalUpdate) {
+          await pushLocalToCloud(currentData, { force: true });
+          hasCompletedInitialPullRef.current = true;
+          return true;
+        }
         hasCompletedInitialPullRef.current = true;
-        isPullingRef.current = false;
         return false;
       }
 
-      const lastLocalUpdate = readStoredTimestamp(LAST_LOCAL_UPDATE_KEY);
       const cloudUpdatedAt = Number.isFinite(Number(cloudData.updatedAt)) ? Number(cloudData.updatedAt) : null;
-      const isDefault = isPristineDefaultData();
+
+      // 如果在拉取期间用户正在本地新增/编辑，或本地存在更新的未同步修改，禁止后台轮询用旧云端数据覆盖本地
+      const hasNewerLocalPending =
+        !isDefault &&
+        (modifiedDuringPull || (pendingLocal && Boolean(lastLocalUpdate) && (!cloudUpdatedAt || lastLocalUpdate >= cloudUpdatedAt)));
 
       // 如果本地仅有默认占位数据，必须无条件应用云端数据，绝对禁止推送到云端覆盖远程
-      const shouldApplyCloud = forceApply || isDefault || !lastLocalUpdate || (cloudUpdatedAt && cloudUpdatedAt > lastLocalUpdate);
-      const shouldPushLocal = !forceApply && !isDefault && lastLocalUpdate && (!cloudUpdatedAt || lastLocalUpdate > cloudUpdatedAt);
+      const shouldApplyCloud =
+        forceApply ||
+        isDefault ||
+        (!hasNewerLocalPending && (!lastLocalUpdate || (cloudUpdatedAt && cloudUpdatedAt > lastLocalUpdate)));
+      const shouldPushLocal =
+        !forceApply &&
+        !isDefault &&
+        Boolean(lastLocalUpdate) &&
+        (hasNewerLocalPending || !cloudUpdatedAt || lastLocalUpdate > cloudUpdatedAt);
       let updated = false;
 
       if (shouldApplyCloud) {
-        const currentData = currentSyncDataRef.current;
         const appliedData = {
           shortcuts: Array.isArray(cloudData.shortcuts) ? cloudData.shortcuts : currentData.shortcuts,
           gridConfig: cloudData.gridConfig && typeof cloudData.gridConfig === 'object' ? cloudData.gridConfig : currentData.gridConfig,
@@ -256,46 +350,37 @@ function App() {
         if (Array.isArray(cloudData.notes)) {
           setNotes(appliedData.notes);
           localStorage.setItem('notes', JSON.stringify(appliedData.notes));
-          setActiveNoteId(null);
+          setActiveNoteId(prevId => (
+            prevId && appliedData.notes.some(n => n.id === prevId)
+              ? prevId
+              : (appliedData.notes[0]?.id || null)
+          ));
           updated = true;
         }
 
         if (updated) {
-          markCloudVersionSynced(cloudUpdatedAt || Date.now(), appliedData);
           currentSyncDataRef.current = appliedData;
           lastPushedSnapshotRef.current = createSyncSnapshot(appliedData);
+          markCloudVersionSynced(cloudUpdatedAt || Date.now(), appliedData);
         }
 
-        setTimeout(() => { isPullingRef.current = false; }, 100);
         hasCompletedInitialPullRef.current = true;
         return updated;
       }
 
       if (shouldPushLocal) {
-        const data = currentSyncDataRef.current;
-        const pushOptions = cloudUpdatedAt ? { baseUpdatedAt: cloudUpdatedAt } : { force: true };
-        const result = await syncService.pushData(data, pushOptions);
-        if (!result) {
-          hasCompletedInitialPullRef.current = true;
-          isPullingRef.current = false;
-          return false;
-        }
-
-        const pushedUpdatedAt = Number(result.updatedAt || Date.now());
-        if (Number.isFinite(pushedUpdatedAt)) {
-          markCloudVersionSynced(pushedUpdatedAt, data);
-        }
-        lastPushedSnapshotRef.current = createSyncSnapshot(data);
-        setTimeout(() => { isPullingRef.current = false; }, 100);
+        const latestData = currentSyncDataRef.current;
+        await pushLocalToCloud(latestData, {
+          force: !cloudUpdatedAt,
+          baseUpdatedAt: cloudUpdatedAt,
+        });
         hasCompletedInitialPullRef.current = true;
         return true;
       }
 
-      setTimeout(() => { isPullingRef.current = false; }, 100);
       hasCompletedInitialPullRef.current = true;
       return false;
     } catch (error) {
-      isPullingRef.current = false;
       if (throwOnError) throw error;
       if (error?.isNetworkError) {
         console.warn('Skipped cloud pull:', error.message);
@@ -303,8 +388,10 @@ function App() {
       }
       console.error('Failed to pull from cloud:', error);
       return false;
+    } finally {
+      isPullingRef.current = false;
     }
-  }, [markCloudVersionSynced]);
+  }, [hasPendingLocalChanges, isPristineDefaultData, markCloudVersionSynced, pushLocalToCloud]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -373,6 +460,7 @@ function App() {
 
   const handleAddShortcut = (newShortcut) => {
     const updated = [...shortcuts, newShortcut];
+    currentSyncDataRef.current = { ...currentSyncDataRef.current, shortcuts: updated };
     setShortcuts(updated);
     localStorage.setItem('shortcuts', JSON.stringify(updated));
     updateLocalTimestamp();
@@ -382,6 +470,7 @@ function App() {
     const target = shortcuts.find(s => s.id === id);
     if (target) removeIconFromCache(target);
     const updated = shortcuts.filter(s => s.id !== id);
+    currentSyncDataRef.current = { ...currentSyncDataRef.current, shortcuts: updated };
     setShortcuts(updated);
     localStorage.setItem('shortcuts', JSON.stringify(updated));
     updateLocalTimestamp();
@@ -389,18 +478,21 @@ function App() {
 
   const handleEditShortcut = (updatedShortcut) => {
     const newShortcuts = shortcuts.map(s => s.id === updatedShortcut.id ? updatedShortcut : s);
+    currentSyncDataRef.current = { ...currentSyncDataRef.current, shortcuts: newShortcuts };
     setShortcuts(newShortcuts);
     localStorage.setItem('shortcuts', JSON.stringify(newShortcuts));
     updateLocalTimestamp();
   };
 
   const handleReorderShortcuts = (newShortcuts) => {
+    currentSyncDataRef.current = { ...currentSyncDataRef.current, shortcuts: newShortcuts };
     setShortcuts(newShortcuts);
     localStorage.setItem('shortcuts', JSON.stringify(newShortcuts));
     updateLocalTimestamp();
   };
 
   const handleShortcutIconEmbedded = (newShortcuts) => {
+    currentSyncDataRef.current = { ...currentSyncDataRef.current, shortcuts: newShortcuts };
     setShortcuts(newShortcuts);
     localStorage.setItem('shortcuts', JSON.stringify(newShortcuts));
     // 图标内嵌仅为本地资源缓存，不调用 updateLocalTimestamp()，防止污染同步时间戳基准
@@ -409,6 +501,7 @@ function App() {
   const handleBgConfigChange = (newConfig) => {
     setBgConfig(prev => {
       const updated = { ...prev, ...newConfig };
+      currentSyncDataRef.current = { ...currentSyncDataRef.current, bgConfig: updated };
       localStorage.setItem('bg_config', JSON.stringify(updated));
       updateLocalTimestamp();
       return updated;
@@ -418,6 +511,7 @@ function App() {
   const handleConfigChange = (newConfig) => {
     setGridConfig(prev => {
       const updated = { ...prev, ...newConfig };
+      currentSyncDataRef.current = { ...currentSyncDataRef.current, gridConfig: updated };
       localStorage.setItem('grid_config', JSON.stringify(updated));
       updateLocalTimestamp();
       return updated;
@@ -425,6 +519,7 @@ function App() {
   };
 
   const handleBgUpdate = (url) => {
+    currentSyncDataRef.current = { ...currentSyncDataRef.current, bgUrl: url };
     setBgUrl(url);
     localStorage.setItem('bg_url', url);
   };
@@ -493,15 +588,16 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!isLoggedIn || !isOnline || !syncService.isLoggedIn() || isPullingRef.current) return;
+    const data = { shortcuts, gridConfig, bgConfig, bgUrl, todos, notes };
+    currentSyncDataRef.current = data;
+    if (!isLoggedIn || !isOnline || !syncService.isLoggedIn()) return;
     if (!hasCompletedInitialPullRef.current) return;
     if (localStorage.getItem(SYNC_AUTO_PUSH_BLOCKED_KEY) === '1') return;
-    if (isPristineDefaultData()) return;
-    const data = currentSyncDataRef.current;
+    if (isPristineDefaultData(data)) return;
     const snapshot = createSyncSnapshot(data);
     const lastLocalUpdate = readStoredTimestamp(LAST_LOCAL_UPDATE_KEY);
     if (!lastLocalUpdate) return;
-    if (!hasPendingLocalChanges()) {
+    if (!hasPendingLocalChanges(data)) {
       if (snapshot === lastPushedSnapshotRef.current) return;
       const lastCloudUpdate = readStoredTimestamp(LAST_CLOUD_UPDATE_KEY);
       if (lastLocalUpdate && lastCloudUpdate && lastLocalUpdate <= lastCloudUpdate) {
@@ -512,12 +608,8 @@ function App() {
 
     const syncData = async () => {
       try {
-        const result = await syncService.pushData(data);
-        if (result && result.updatedAt) {
-          const numeric = Number(result.updatedAt);
-          if (Number.isFinite(numeric)) markCloudVersionSynced(numeric, data);
-        }
-        lastPushedSnapshotRef.current = snapshot;
+        const latestData = currentSyncDataRef.current || data;
+        await pushLocalToCloud(latestData, { force: false });
       } catch (error) {
         if (error?.isNetworkError) {
           console.warn('Skipped auto-sync:', error.message);
@@ -528,41 +620,7 @@ function App() {
     };
     const timeoutId = setTimeout(syncData, SYNC_PUSH_DEBOUNCE_MS);
     return () => clearTimeout(timeoutId);
-  }, [shortcuts, gridConfig, bgConfig, bgUrl, todos, notes, isLoggedIn, isOnline, isPristineDefaultData, hasPendingLocalChanges, markCloudVersionSynced]);
-
-  const pushLocalToCloud = useCallback(async (dataOverride = null, options = {}) => {
-    if (!syncService.isLoggedIn()) throw new Error('Not logged in');
-    const data = dataOverride || currentSyncDataRef.current;
-    const force = options.force !== false;
-
-    const markSynced = (result, syncedData, requestedUpdatedAt) => {
-      const updatedAt = Number(result?.updatedAt || requestedUpdatedAt || Date.now());
-      markCloudVersionSynced(updatedAt, syncedData);
-      lastPushedSnapshotRef.current = createSyncSnapshot(syncedData);
-      hasCompletedInitialPullRef.current = true;
-      localStorage.removeItem(SYNC_AUTO_PUSH_BLOCKED_KEY);
-      return result;
-    };
-
-    try {
-      const result = await syncService.pushData(data, { force });
-      if (!result) throw new Error('当前离线，无法同步到云端');
-      return markSynced(result, data);
-    } catch (error) {
-      const currentUpdatedAt = Number(error?.currentUpdatedAt);
-      if (!error?.isSyncConflict || !Number.isFinite(currentUpdatedAt)) {
-        throw error;
-      }
-
-      const updatedAt = Math.max(Date.now(), currentUpdatedAt + 1);
-      const result = await syncService.pushData(data, {
-        baseUpdatedAt: currentUpdatedAt,
-        updatedAt,
-      });
-      if (!result) throw new Error('当前离线，无法同步到云端');
-      return markSynced(result, data, updatedAt);
-    }
-  }, [markCloudVersionSynced]);
+  }, [shortcuts, gridConfig, bgConfig, bgUrl, todos, notes, isLoggedIn, isOnline, isPristineDefaultData, hasPendingLocalChanges, pushLocalToCloud]);
 
   useEffect(() => { localStorage.setItem('todos', JSON.stringify(todos)); }, [todos]);
 
@@ -581,44 +639,74 @@ function App() {
   const handleAddTodo = (text) => {
     const now = new Date().toISOString();
     const newTodo = { id: Date.now(), text, completed: false, createdAt: now, updatedAt: now, completedAt: null };
-    setTodos(prev => [newTodo, ...prev]);
+    setTodos(prev => {
+      const updated = [newTodo, ...prev];
+      currentSyncDataRef.current = { ...currentSyncDataRef.current, todos: updated };
+      localStorage.setItem('todos', JSON.stringify(updated));
+      return updated;
+    });
     updateLocalTimestamp();
   };
 
   const handleToggleTodo = (id) => {
     const now = new Date().toISOString();
-    setTodos(prev => prev.map(todo => {
-      if (todo.id !== id) return todo;
-      const completed = !todo.completed;
-      return { ...todo, completed, updatedAt: now, completedAt: completed ? now : null };
-    }));
+    setTodos(prev => {
+      const updated = prev.map(todo => {
+        if (todo.id !== id) return todo;
+        const completed = !todo.completed;
+        return { ...todo, completed, updatedAt: now, completedAt: completed ? now : null };
+      });
+      currentSyncDataRef.current = { ...currentSyncDataRef.current, todos: updated };
+      localStorage.setItem('todos', JSON.stringify(updated));
+      return updated;
+    });
     updateLocalTimestamp();
   };
 
   const handleDeleteTodo = (id) => {
-    setTodos(prev => prev.filter(todo => todo.id !== id));
+    setTodos(prev => {
+      const updated = prev.filter(todo => todo.id !== id);
+      currentSyncDataRef.current = { ...currentSyncDataRef.current, todos: updated };
+      localStorage.setItem('todos', JSON.stringify(updated));
+      return updated;
+    });
     updateLocalTimestamp();
   };
 
   const handleAddNote = () => {
     const newNote = { id: Date.now(), title: '未命名笔记', content: '', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-    setNotes(prev => [newNote, ...prev]);
+    setNotes(prev => {
+      const updated = [newNote, ...prev];
+      currentSyncDataRef.current = { ...currentSyncDataRef.current, notes: updated };
+      localStorage.setItem('notes', JSON.stringify(updated));
+      return updated;
+    });
     setActiveNoteId(newNote.id);
     setIsNotesOpen(true);
     updateLocalTimestamp();
   };
 
   const handleUpdateNote = (id, content) => {
-    setNotes(prev => prev.map(note => {
-      if (note.id !== id) return note;
-      const firstLine = content.split('\n').find(line => line.trim() !== '') || '未命名笔记';
-      return { ...note, content, title: firstLine.slice(0, 40), updatedAt: new Date().toISOString() };
-    }));
+    setNotes(prev => {
+      const updated = prev.map(note => {
+        if (note.id !== id) return note;
+        const firstLine = content.split('\n').find(line => line.trim() !== '') || '未命名笔记';
+        return { ...note, content, title: firstLine.slice(0, 40), updatedAt: new Date().toISOString() };
+      });
+      currentSyncDataRef.current = { ...currentSyncDataRef.current, notes: updated };
+      localStorage.setItem('notes', JSON.stringify(updated));
+      return updated;
+    });
     updateLocalTimestamp();
   };
 
   const handleDeleteNote = (id) => {
-    setNotes(prev => prev.filter(note => note.id !== id));
+    setNotes(prev => {
+      const updated = prev.filter(note => note.id !== id);
+      currentSyncDataRef.current = { ...currentSyncDataRef.current, notes: updated };
+      localStorage.setItem('notes', JSON.stringify(updated));
+      return updated;
+    });
     if (activeNoteId === id) setActiveNoteId(null);
     updateLocalTimestamp();
   };
@@ -637,6 +725,7 @@ function App() {
       return 0;
     }
     const allNotes = [...notes, ...newNotes];
+    currentSyncDataRef.current = { ...currentSyncDataRef.current, notes: allNotes };
     setNotes(allNotes);
     localStorage.setItem('notes', JSON.stringify(allNotes));
     updateLocalTimestamp();
@@ -667,12 +756,14 @@ function App() {
     if (!hasValidData) throw new Error('文件不包含有效的备份数据。');
 
     let importedCount = 0;
-    if (data.todos && Array.isArray(data.todos)) { setTodos(data.todos); localStorage.setItem('todos', JSON.stringify(data.todos)); importedCount++; }
-    if (data.notes && Array.isArray(data.notes)) { setNotes(data.notes); localStorage.setItem('notes', JSON.stringify(data.notes)); setActiveNoteId(null); importedCount++; }
-    if (data.shortcuts && Array.isArray(data.shortcuts)) { setShortcuts(data.shortcuts); localStorage.setItem('shortcuts', JSON.stringify(data.shortcuts)); importedCount++; }
-    if (data.gridConfig && typeof data.gridConfig === 'object') { setGridConfig(data.gridConfig); localStorage.setItem('grid_config', JSON.stringify(data.gridConfig)); importedCount++; }
-    if (data.bgConfig && typeof data.bgConfig === 'object') { setBgConfig(data.bgConfig); localStorage.setItem('bg_config', JSON.stringify(data.bgConfig)); importedCount++; }
-    if (data.bgUrl && typeof data.bgUrl === 'string') { setBgUrl(data.bgUrl); localStorage.setItem('bg_url', data.bgUrl); importedCount++; }
+    const nextSyncData = { ...currentSyncDataRef.current };
+    if (data.todos && Array.isArray(data.todos)) { nextSyncData.todos = data.todos; setTodos(data.todos); localStorage.setItem('todos', JSON.stringify(data.todos)); importedCount++; }
+    if (data.notes && Array.isArray(data.notes)) { nextSyncData.notes = data.notes; setNotes(data.notes); localStorage.setItem('notes', JSON.stringify(data.notes)); setActiveNoteId(null); importedCount++; }
+    if (data.shortcuts && Array.isArray(data.shortcuts)) { nextSyncData.shortcuts = data.shortcuts; setShortcuts(data.shortcuts); localStorage.setItem('shortcuts', JSON.stringify(data.shortcuts)); importedCount++; }
+    if (data.gridConfig && typeof data.gridConfig === 'object') { nextSyncData.gridConfig = data.gridConfig; setGridConfig(data.gridConfig); localStorage.setItem('grid_config', JSON.stringify(data.gridConfig)); importedCount++; }
+    if (data.bgConfig && typeof data.bgConfig === 'object') { nextSyncData.bgConfig = data.bgConfig; setBgConfig(data.bgConfig); localStorage.setItem('bg_config', JSON.stringify(data.bgConfig)); importedCount++; }
+    if (data.bgUrl && typeof data.bgUrl === 'string') { nextSyncData.bgUrl = data.bgUrl; setBgUrl(data.bgUrl); localStorage.setItem('bg_url', data.bgUrl); importedCount++; }
+    currentSyncDataRef.current = nextSyncData;
 
     updateLocalTimestamp();
     setToast({ message: `数据导入成功！已导入 ${importedCount} 项数据。`, type: 'success' });
