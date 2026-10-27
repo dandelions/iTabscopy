@@ -218,13 +218,25 @@ function renderWebDashboardHtml() {
       background-attachment: fixed;
       transition: background-image 0.5s ease-in-out;
     }
+    .custom-scrollbar {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 255, 255, 0.35) rgba(0, 0, 0, 0.15);
+    }
     .custom-scrollbar::-webkit-scrollbar {
-      width: 5px;
-      height: 5px;
+      width: 7px;
+      height: 7px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.15);
+      border-radius: 9999px;
     }
     .custom-scrollbar::-webkit-scrollbar-thumb {
-      background: rgba(255, 255, 255, 0.2);
+      background: rgba(255, 255, 255, 0.32);
       border-radius: 9999px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.5);
     }
     .markdown-body {
       word-break: break-word;
@@ -260,7 +272,14 @@ function renderWebDashboardHtml() {
         </svg>
       </div>
       <span class="font-bold tracking-wide text-base sm:text-lg bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-200 to-slate-400">iTabs Web</span>
-      <span id="sync-status" class="hidden text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">已同步</span>
+      <!-- 🔄 手动拉取与同步按钮 -->
+      <button id="sync-btn" onclick="manualSync()" title="点击手动拉取云端数据并同步"
+              class="hidden flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/25 transition active:scale-95 cursor-pointer select-none">
+        <svg id="sync-icon" class="w-3.5 h-3.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+        <span id="sync-text">已同步</span>
+      </button>
     </div>
 
     <!-- 用户栏状态 -->
@@ -370,15 +389,19 @@ function renderWebDashboardHtml() {
               <span class="text-xs text-slate-400">点击勾选完成 &bull; 自动云端同步</span>
             </div>
 
-            <!-- 新增待办输入栏 -->
-            <div class="flex gap-2 mb-4">
-              <input id="new-todo-input" type="text" placeholder="输入待办事项，按回车添加..."
+            <!-- 新增待办输入栏 (含时间选项) -->
+            <div class="flex flex-col sm:flex-row gap-2 mb-4">
+              <input id="new-todo-input" type="text" placeholder="输入待办事项，按回车快速添加..."
                      onkeydown="if(event.key==='Enter') addTodo()"
                      class="flex-1 px-3.5 py-2.5 bg-black/30 border border-glass-border rounded-xl text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-400 transition" />
-              <button onclick="addTodo()" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs sm:text-sm font-medium transition flex items-center gap-1 shadow-md shadow-emerald-600/20">
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
-                <span>添加</span>
-              </button>
+              <div class="flex items-center gap-2 shrink-0">
+                <input id="new-todo-time" type="datetime-local" title="设置待办时间 (可选)"
+                       class="px-2.5 py-2 bg-black/30 border border-glass-border rounded-xl text-xs text-slate-300 focus:outline-none focus:border-emerald-400 transition [color-scheme:dark]" />
+                <button onclick="addTodo()" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs sm:text-sm font-medium transition flex items-center gap-1 shadow-md shadow-emerald-600/20 shrink-0">
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+                  <span>添加</span>
+                </button>
+              </div>
             </div>
 
             <div id="todos-container" class="space-y-2 flex-1 overflow-y-auto pr-1 custom-scrollbar">
@@ -440,7 +463,7 @@ function renderWebDashboardHtml() {
                 </div>
                 
                 <!-- 📖 阅读模式展示区域 (带 min-h-0 避免内容溢出被截断，加 pb-10 保证底部完全显示) -->
-                <div id="right-note-body" class="flex-1 overflow-y-auto pr-1.5 sm:pr-2 custom-scrollbar text-xs sm:text-sm text-slate-200 min-h-0 pb-10">
+                <div id="right-note-body" class="flex-1 overflow-y-auto pr-2 custom-scrollbar text-xs sm:text-sm text-slate-200 min-h-0 pb-12">
                   <div class="h-full flex flex-col items-center justify-center text-slate-400 text-xs sm:text-sm gap-2">
                     <svg class="w-7 h-7 sm:w-8 sm:h-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
@@ -575,6 +598,11 @@ function renderWebDashboardHtml() {
     }
 
     async function fetchCloudData(token) {
+      const syncBtn = document.getElementById('sync-btn');
+      const syncText = document.getElementById('sync-text');
+      const syncIcon = document.getElementById('sync-icon');
+      if (syncBtn) syncBtn.classList.remove('hidden');
+
       try {
         const res = await fetch('/api/sync/pull', {
           headers: { 'Authorization': 'Bearer ' + token }
@@ -584,10 +612,56 @@ function renderWebDashboardHtml() {
           return;
         }
         const result = await res.json();
-        currentSyncData = result.data || {};
+        currentSyncData = result.data || { shortcuts: [], todos: [], notes: [] };
         renderDashboard(currentSyncData);
+        if (syncText) syncText.innerText = '已同步';
+        if (syncBtn) {
+          syncBtn.className = 'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/25 transition active:scale-95 cursor-pointer select-none';
+        }
       } catch (err) {
         console.error('拉取数据失败:', err);
+        if (syncText) syncText.innerText = '离线模式';
+      }
+    }
+
+    // 🔄 手动拉取云端数据并同步
+    async function manualSync() {
+      const token = localStorage.getItem('itabs_token');
+      if (!token) return;
+
+      const syncBtn = document.getElementById('sync-btn');
+      const syncIcon = document.getElementById('sync-icon');
+      const syncText = document.getElementById('sync-text');
+
+      syncIcon.classList.add('animate-spin');
+      syncText.innerText = '同步中...';
+      syncBtn.className = 'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30 transition cursor-wait';
+      syncBtn.disabled = true;
+
+      try {
+        const res = await fetch('/api/sync/pull', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (res.status === 401) {
+          logout();
+          return;
+        }
+        const result = await res.json();
+        if (result.data) {
+          currentSyncData = result.data;
+          renderDashboard(result.data);
+        }
+        syncText.innerText = '已同步';
+        syncBtn.className = 'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/25 transition active:scale-95 cursor-pointer';
+      } catch (err) {
+        console.error('手动同步失败:', err);
+        syncText.innerText = '同步失败';
+        syncBtn.className = 'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-rose-500/15 text-rose-300 border border-rose-500/30 transition';
+      } finally {
+        setTimeout(() => {
+          syncIcon.classList.remove('animate-spin');
+          syncBtn.disabled = false;
+        }, 600);
       }
     }
 
@@ -596,9 +670,15 @@ function renderWebDashboardHtml() {
       const token = localStorage.getItem('itabs_token');
       if (!token || !currentSyncData) return;
 
-      const syncStatus = document.getElementById('sync-status');
-      syncStatus.innerText = '同步中...';
-      syncStatus.className = 'text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full inline-block';
+      const syncBtn = document.getElementById('sync-btn');
+      const syncText = document.getElementById('sync-text');
+      const syncIcon = document.getElementById('sync-icon');
+
+      if (syncText) syncText.innerText = '同步中...';
+      if (syncIcon) syncIcon.classList.add('animate-spin');
+      if (syncBtn) {
+        syncBtn.className = 'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30 transition';
+      }
 
       const baseUpdatedAt = currentSyncData.updatedAt || 0;
       const newUpdatedAt = Date.now();
@@ -620,15 +700,23 @@ function renderWebDashboardHtml() {
         const result = await res.json();
         if (res.ok) {
           currentSyncData.updatedAt = result.updatedAt;
-          syncStatus.innerText = '已同步';
-          syncStatus.className = 'text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full inline-block';
+          if (syncText) syncText.innerText = '已同步';
+          if (syncBtn) {
+            syncBtn.className = 'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/25 transition active:scale-95 cursor-pointer';
+          }
         } else {
-          syncStatus.innerText = '同步失败';
-          syncStatus.className = 'text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded-full inline-block';
+          if (syncText) syncText.innerText = '同步冲突';
+          if (syncBtn) {
+            syncBtn.className = 'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-rose-500/15 text-rose-400 border border-rose-500/30 transition';
+          }
         }
       } catch (e) {
-        syncStatus.innerText = '网络异常';
-        syncStatus.className = 'text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded-full inline-block';
+        if (syncText) syncText.innerText = '网络异常';
+        if (syncBtn) {
+          syncBtn.className = 'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-white/10 text-slate-400 border border-glass-border transition';
+        }
+      } finally {
+        if (syncIcon) syncIcon.classList.remove('animate-spin');
       }
     }
 
@@ -799,6 +887,21 @@ function renderWebDashboardHtml() {
     // ✅ 待办模块：渲染 + 新增 + 切换状态 + 删除
     // =========================================================================
 
+    function formatTodoTime(isoOrStr) {
+      if (!isoOrStr) return '';
+      try {
+        const d = new Date(isoOrStr);
+        if (isNaN(d.getTime())) return isoOrStr;
+        const now = new Date();
+        const isToday = d.toDateString() === now.toDateString();
+        const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        if (isToday) return '今天 ' + timeStr;
+        return (d.getMonth() + 1) + '月' + d.getDate() + '日 ' + timeStr;
+      } catch (e) {
+        return isoOrStr;
+      }
+    }
+
     function renderTodos(todos) {
       const container = document.getElementById('todos-container');
       const emptyEl = document.getElementById('todos-empty');
@@ -812,36 +915,56 @@ function renderWebDashboardHtml() {
       }
       emptyEl.classList.add('hidden');
 
+      const nowTs = Date.now();
       container.innerHTML = todos.map((t, idx) => {
         const isDone = Boolean(t.completed);
-        return \`
-          <div class="group flex items-center justify-between gap-2.5 p-3 rounded-2xl bg-white/5 hover:bg-white/[0.08] border border-glass-border text-xs sm:text-sm transition">
-            <div class="flex items-center gap-3 flex-1 min-w-0 cursor-pointer" onclick="toggleTodoStatus(\${idx})">
-              <input type="checkbox" \${isDone ? 'checked' : ''} class="rounded border-slate-600 text-emerald-500 w-4 h-4 cursor-pointer pointer-events-none" />
-              <span class="truncate flex-1 select-none \${isDone ? 'line-through text-slate-400' : 'text-slate-200'}">\${t.text || t.content || '未命名待办'}</span>
-            </div>
-            <button onclick="deleteTodo(\${idx})" class="opacity-40 group-hover:opacity-100 text-slate-400 hover:text-red-400 p-1.5 rounded transition" title="删除">
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-            </button>
-          </div>
-        \`;
+        const timeLabel = formatTodoTime(t.dueDate || t.time);
+        const isOverdue = !isDone && t.dueDate && (new Date(t.dueDate).getTime() < nowTs);
+
+        const timeHtml = timeLabel ? (
+          '<div class="flex items-center gap-1.5 mt-0.5 text-[10px] ' + (isOverdue ? 'text-rose-400 font-medium' : 'text-slate-400') + '">' +
+            '<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>' +
+            '<span>' + timeLabel + '</span>' +
+            (isOverdue ? '<span class="px-1 py-0.2 rounded bg-rose-500/20 text-rose-300 text-[9px]">已超期</span>' : '') +
+          '</div>'
+        ) : '';
+
+        const textContent = escapeHtml(t.text || t.content || '未命名待办');
+
+        return '<div class="group flex items-center justify-between gap-2.5 p-3 rounded-2xl bg-white/5 hover:bg-white/[0.08] border border-glass-border text-xs sm:text-sm transition">' +
+          '<div class="flex items-center gap-3 flex-1 min-w-0 cursor-pointer" onclick="toggleTodoStatus(' + idx + ')">' +
+            '<input type="checkbox" ' + (isDone ? 'checked' : '') + ' class="rounded border-slate-600 text-emerald-500 w-4 h-4 cursor-pointer pointer-events-none" />' +
+            '<div class="flex flex-col min-w-0 flex-1">' +
+              '<span class="truncate select-none ' + (isDone ? 'line-through text-slate-400' : 'text-slate-200') + '">' + textContent + '</span>' +
+              timeHtml +
+            '</div>' +
+          '</div>' +
+          '<button onclick="deleteTodo(' + idx + ')" class="opacity-40 group-hover:opacity-100 text-slate-400 hover:text-red-400 p-1.5 rounded transition" title="删除">' +
+            '<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>' +
+          '</button>' +
+        '</div>';
       }).join('');
     }
 
     function addTodo() {
       const input = document.getElementById('new-todo-input');
+      const timeInput = document.getElementById('new-todo-time');
       const text = input.value.trim();
       if (!text) return;
+
+      const dueDate = timeInput ? timeInput.value : '';
 
       if (!Array.isArray(currentSyncData.todos)) currentSyncData.todos = [];
       currentSyncData.todos.unshift({
         id: 'todo-' + Date.now(),
         text: text,
+        dueDate: dueDate || null,
         completed: false,
-        createdAt: Date.now()
+        createdAt: new Date().toISOString()
       });
 
       input.value = '';
+      if (timeInput) timeInput.value = '';
       renderTodos(currentSyncData.todos);
       saveToCloud();
     }
@@ -979,6 +1102,7 @@ function renderWebDashboardHtml() {
       const editorEl = document.getElementById('right-note-editor');
       bodyEl.classList.remove('hidden');
       editorEl.classList.add('hidden');
+      bodyEl.scrollTop = 0;
 
       document.getElementById('btn-edit-note').classList.remove('hidden');
       document.getElementById('btn-delete-note').classList.remove('hidden');
@@ -1129,7 +1253,7 @@ function renderWebDashboardHtml() {
       document.getElementById('dashboard-section').classList.add('hidden');
       document.getElementById('logout-btn').classList.add('hidden');
       document.getElementById('user-email-text').innerText = '';
-      document.getElementById('sync-status').classList.add('hidden');
+      const sBtn = document.getElementById('sync-btn'); if (sBtn) sBtn.classList.add('hidden');
     }
 
     function showDashboardView(email) {
