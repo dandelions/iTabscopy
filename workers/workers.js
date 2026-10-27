@@ -238,11 +238,47 @@ function renderWebDashboardHtml() {
     .custom-scrollbar::-webkit-scrollbar-thumb:hover {
       background: rgba(255, 255, 255, 0.5);
     }
+    #notes-detail-panel:not(.hidden) {
+      display: flex !important;
+      flex-direction: column !important;
+    }
+    #notes-list-panel:not(.hidden) {
+      display: flex !important;
+      flex-direction: column !important;
+    }
+    #right-note-body {
+      flex: 1 1 0% !important;
+      min-height: 0 !important;
+      overflow-y: auto !important;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+    }
     .markdown-body {
       word-break: break-word;
       overflow-wrap: break-word;
       line-height: 1.8;
       color: #e2e8f0;
+      padding-bottom: 4rem;
+    }
+    .markdown-body img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 0.5rem;
+      margin: 0.85rem 0;
+    }
+    .markdown-body table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 0.85rem;
+    }
+    .markdown-body th, .markdown-body td {
+      border: 1px solid rgba(255,255,255,0.15);
+      padding: 0.5rem 0.75rem;
+      text-align: left;
+    }
+    .markdown-body th {
+      background: rgba(255,255,255,0.08);
+      font-weight: 600;
     }
     .markdown-body h1 { font-size: 1.45rem; font-weight: 700; margin-bottom: 0.85rem; color: #fff; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.3rem; }
     .markdown-body h2 { font-size: 1.25rem; font-weight: 600; margin-top: 1.2rem; margin-bottom: 0.6rem; color: #f1f5f9; }
@@ -416,8 +452,8 @@ function renderWebDashboardHtml() {
         <!-- 📌 视图 3: 笔记 -->
         <div id="view-notes" class="hidden animate-fade">
           <div class="bg-white/[0.07] backdrop-blur-md border border-glass-border rounded-3xl p-3 sm:p-5 shadow-xl">
-            <!-- 整体容器自适应大屏高度，最低 600px，最大 820px -->
-            <div id="notes-wrapper" class="flex flex-col md:flex-row gap-3 sm:gap-4 min-h-[580px] h-[72vh] max-h-[820px] min-h-0">
+            <!-- 整体容器自适应高度，手机与电脑大屏均友好展示完整滚动 -->
+            <div id="notes-wrapper" class="flex flex-col md:flex-row gap-3 sm:gap-4 min-h-[460px] sm:min-h-[580px] h-[calc(100vh-170px)] sm:h-[75vh] max-h-[860px] min-h-0">
               
               <!-- 👈 左侧紧凑笔记列表 (固定宽度 300px，让右侧编辑空间最大化) -->
               <div id="notes-list-panel" class="w-full md:w-72 lg:w-80 shrink-0 flex flex-col bg-black/25 rounded-2xl border border-glass-border p-2.5 sm:p-3 overflow-hidden min-h-0">
@@ -438,7 +474,7 @@ function renderWebDashboardHtml() {
               </div>
 
               <!-- 👉 右侧同页笔记面板 (阅读 / 编辑 / 删除) -->
-              <div id="notes-detail-panel" class="hidden md:flex flex-1 flex-col bg-black/35 rounded-2xl border border-glass-border p-4 sm:p-6 overflow-hidden min-h-0 min-w-0">
+              <div id="notes-detail-panel" class="hidden md:flex flex-col flex-1 bg-black/35 rounded-2xl border border-glass-border p-3.5 sm:p-6 overflow-hidden min-h-0 min-w-0 h-full">
                 
                 <!-- 顶部工具栏 (标题 + 操作按钮) -->
                 <div class="flex justify-between items-start pb-2.5 border-b border-glass-border/60 mb-2.5 shrink-0">
@@ -462,8 +498,8 @@ function renderWebDashboardHtml() {
                   </div>
                 </div>
                 
-                <!-- 📖 阅读模式展示区域 (带 min-h-0 避免内容溢出被截断，加 pb-10 保证底部完全显示) -->
-                <div id="right-note-body" class="flex-1 overflow-y-auto pr-2 custom-scrollbar text-xs sm:text-sm text-slate-200 min-h-0 pb-12">
+                <!-- 📖 阅读模式展示区域 (带 min-h-0 避免内容溢出被截断，加 pb-16 保证底部完全显示) -->
+                <div id="right-note-body" class="flex-1 overflow-y-auto pr-2 custom-scrollbar text-xs sm:text-sm text-slate-200 min-h-0 pb-16">
                   <div class="h-full flex flex-col items-center justify-center text-slate-400 text-xs sm:text-sm gap-2">
                     <svg class="w-7 h-7 sm:w-8 sm:h-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
@@ -1088,7 +1124,9 @@ function renderWebDashboardHtml() {
 
       if (window.innerWidth < 768) {
         document.getElementById('notes-list-panel').classList.add('hidden');
-        document.getElementById('notes-detail-panel').classList.remove('hidden');
+        const detailPanel = document.getElementById('notes-detail-panel');
+        detailPanel.classList.remove('hidden');
+        detailPanel.classList.add('flex');
       }
     }
 
@@ -1146,7 +1184,9 @@ function renderWebDashboardHtml() {
 
       if (window.innerWidth < 768) {
         document.getElementById('notes-list-panel').classList.add('hidden');
-        document.getElementById('notes-detail-panel').classList.remove('hidden');
+        const detailPanel = document.getElementById('notes-detail-panel');
+        detailPanel.classList.remove('hidden');
+        detailPanel.classList.add('flex');
       }
     }
 
@@ -1236,7 +1276,9 @@ function renderWebDashboardHtml() {
 
     function mobileBackToList() {
       document.getElementById('notes-list-panel').classList.remove('hidden');
-      document.getElementById('notes-detail-panel').classList.add('hidden');
+      const detailPanel = document.getElementById('notes-detail-panel');
+      detailPanel.classList.add('hidden');
+      detailPanel.classList.remove('flex');
     }
 
     // Bing 每日壁纸
