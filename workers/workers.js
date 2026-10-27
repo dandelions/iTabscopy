@@ -546,8 +546,8 @@ function renderWebDashboardHtml() {
 
     async function init() {
       loadBingWallpaper();
-      const token = localStorage.getItem('itabs_token');
-      const email = localStorage.getItem('itabs_email');
+      const token = localStorage.getItem('itabs_token') || localStorage.getItem('sync_token');
+      const email = localStorage.getItem('itabs_email') || localStorage.getItem('sync_email');
 
       window.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') closeFolderModal();
@@ -589,6 +589,8 @@ function renderWebDashboardHtml() {
 
         localStorage.setItem('itabs_token', data.token);
         localStorage.setItem('itabs_email', data.email);
+        localStorage.setItem('sync_token', data.token);
+        localStorage.setItem('sync_email', data.email);
         showDashboardView(data.email);
         fetchCloudData(data.token);
       } catch (err) {
@@ -626,7 +628,7 @@ function renderWebDashboardHtml() {
 
     // 🔄 手动拉取云端数据并同步
     async function manualSync() {
-      const token = localStorage.getItem('itabs_token');
+      const token = localStorage.getItem('itabs_token') || localStorage.getItem('sync_token');
       if (!token) return;
 
       const syncBtn = document.getElementById('sync-btn');
@@ -667,7 +669,7 @@ function renderWebDashboardHtml() {
 
     // 🌟 全局持久化保存至 Cloudflare KV
     async function saveToCloud() {
-      const token = localStorage.getItem('itabs_token');
+      const token = localStorage.getItem('itabs_token') || localStorage.getItem('sync_token');
       if (!token || !currentSyncData) return;
 
       const syncBtn = document.getElementById('sync-btn');
@@ -760,6 +762,7 @@ function renderWebDashboardHtml() {
     }
 
     function getShortcutIcon(s) {
+      if (!s) return generateLetterAvatar('Web');
       if (s.customIcon && s.customIcon.data) return s.customIcon.data;
       if (s.customIcon && s.customIcon.url) return s.customIcon.url;
       if (s.icon && !s.icon.includes('google.com/s2/favicons')) return s.icon;
@@ -770,7 +773,8 @@ function renderWebDashboardHtml() {
 
       if (s.url) {
         try {
-          const domain = new URL(s.url).hostname;
+          const rawUrl = s.url.startsWith('http://') || s.url.startsWith('https://') ? s.url : ('https://' + s.url);
+          const domain = new URL(rawUrl).hostname;
           if (domain) {
             return 'https://api.iowen.cn/favicon/' + domain + '.png';
           }
@@ -1261,12 +1265,13 @@ function renderWebDashboardHtml() {
       document.getElementById('dashboard-section').classList.remove('hidden');
       document.getElementById('logout-btn').classList.remove('hidden');
       document.getElementById('user-email-text').innerText = email || '';
-      document.getElementById('sync-status').classList.remove('hidden');
+      const syncBtn = document.getElementById('sync-btn');
+      if (syncBtn) syncBtn.classList.remove('hidden');
       switchTab('shortcuts'); // 默认展示“桌面”
     }
 
     function logout() {
-      const token = localStorage.getItem('itabs_token');
+      const token = localStorage.getItem('itabs_token') || localStorage.getItem('sync_token');
       if (token) {
         fetch('/api/auth/logout', {
           headers: { 'Authorization': 'Bearer ' + token }
@@ -1274,6 +1279,8 @@ function renderWebDashboardHtml() {
       }
       localStorage.removeItem('itabs_token');
       localStorage.removeItem('itabs_email');
+      localStorage.removeItem('sync_token');
+      localStorage.removeItem('sync_email');
       showLoginView();
     }
 
