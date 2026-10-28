@@ -457,7 +457,7 @@ function renderWebDashboardHtml() {
             </form>
           </div>
 
-          <div class="bg-white/[0.07] backdrop-blur-md border border-glass-border rounded-3xl p-4 sm:p-6 shadow-xl min-h-[300px]">
+          <div class="w-full">
             <!-- ⚡ PC 端每行展示不超过 5 个 (最大 5 列，居中优雅展示) -->
             <div id="shortcuts-container" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3.5 sm:gap-6 max-w-4xl mx-auto py-2">
               <!-- 动态加载桌面图标和文件夹 -->
@@ -470,7 +470,7 @@ function renderWebDashboardHtml() {
 
         <!-- 📌 视图 2: 待办 -->
         <div id="view-todos" class="hidden animate-fade">
-          <div class="bg-white/[0.07] backdrop-blur-md border border-glass-border rounded-3xl p-4 sm:p-6 shadow-xl max-w-2xl mx-auto flex flex-col min-h-[400px]">
+          <div class="max-w-2xl mx-auto flex flex-col min-h-[400px]">
             <div class="flex items-center justify-between pb-3 mb-3 border-b border-glass-border">
               <h2 class="text-sm sm:text-base font-semibold text-slate-200">待办任务</h2>
               <span class="text-xs text-slate-400">点击勾选完成 &bull; 自动云端同步</span>
@@ -502,12 +502,12 @@ function renderWebDashboardHtml() {
 
         <!-- 📌 视图 3: 笔记 -->
         <div id="view-notes" class="hidden animate-fade">
-          <div class="bg-white/[0.07] backdrop-blur-md border border-glass-border rounded-3xl p-3 sm:p-5 shadow-xl">
+          <div class="w-full">
             <!-- 整体容器自适应高度，手机与电脑大屏均友好展示完整滚动 -->
             <div id="notes-wrapper" class="flex flex-col md:flex-row gap-3 sm:gap-4 min-h-[460px] sm:min-h-[580px] h-[calc(100vh-170px)] sm:h-[75vh] max-h-[860px] min-h-0">
               
               <!-- 👈 左侧紧凑笔记列表 (固定宽度 300px，让右侧编辑空间最大化) -->
-              <div id="notes-list-panel" class="w-full md:w-72 lg:w-80 shrink-0 flex flex-col bg-black/25 rounded-2xl border border-glass-border p-2.5 sm:p-3 overflow-hidden min-h-0">
+              <div id="notes-list-panel" class="w-full md:w-72 lg:w-80 shrink-0 flex flex-col bg-black/25 backdrop-blur-md rounded-2xl border border-glass-border p-2.5 sm:p-3 overflow-hidden min-h-0">
                 <div class="flex items-center justify-between pb-2 mb-2 border-b border-white/5 shrink-0">
                   <span class="text-xs text-slate-400 font-medium">笔记列表</span>
                   <!-- ➕ 新建笔记按钮 -->
@@ -525,7 +525,7 @@ function renderWebDashboardHtml() {
               </div>
 
               <!-- 👉 右侧同页笔记面板 (阅读 / 编辑 / 删除) -->
-              <div id="notes-detail-panel" class="hidden md:flex flex-col flex-1 bg-black/35 rounded-2xl border border-glass-border p-3.5 sm:p-6 overflow-hidden min-h-0 min-w-0 h-full">
+              <div id="notes-detail-panel" class="hidden md:flex flex-col flex-1 bg-black/35 backdrop-blur-md rounded-2xl border border-glass-border p-3.5 sm:p-6 overflow-hidden min-h-0 min-w-0 h-full">
                 
                 <!-- 顶部工具栏 (标题 + 操作按钮) -->
                 <div class="flex justify-between items-start pb-2.5 border-b border-glass-border/60 mb-2.5 shrink-0">
@@ -1587,7 +1587,7 @@ function renderWebDashboardHtml() {
 
         const textContent = escapeHtml(t.text || t.content || '未命名待办');
 
-        return '<div class="group flex items-center justify-between gap-2.5 p-3 rounded-2xl bg-white/5 hover:bg-white/[0.08] border border-glass-border text-xs sm:text-sm transition">' +
+        return '<div class="group flex items-center justify-between gap-2.5 p-3 rounded-2xl bg-black/30 hover:bg-black/45 backdrop-blur-sm border border-glass-border text-xs sm:text-sm transition">' +
           '<div class="flex items-center gap-3 flex-1 min-w-0 cursor-pointer" onclick="toggleTodoStatus(' + idx + ')">' +
             '<input type="checkbox" ' + (isDone ? 'checked' : '') + ' class="rounded border-slate-600 text-emerald-500 w-4 h-4 cursor-pointer pointer-events-none" />' +
             '<div class="flex flex-col min-w-0 flex-1">' +
