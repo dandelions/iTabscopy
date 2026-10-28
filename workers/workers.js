@@ -320,7 +320,7 @@ function renderWebDashboardHtml() {
 <body class="min-h-screen text-slate-100 font-sans flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
 
   <!-- 背景遮罩层 -->
-  <div id="bg-overlay" class="fixed inset-0 bg-slate-950/60 backdrop-blur-[2px] -z-10 transition-all duration-300"></div>
+  <div id="bg-overlay" class="fixed inset-0 bg-black/60 backdrop-blur-[2px] -z-10 transition-all duration-300"></div>
 
   <!-- 顶部导航栏 -->
   <header class="w-full border-b border-glass-border bg-black/20 backdrop-blur-md sticky top-0 z-30 px-4 sm:px-6 py-3 flex justify-between items-center">
@@ -695,12 +695,15 @@ function renderWebDashboardHtml() {
           <div class="p-3 bg-white/5 rounded-2xl border border-white/10 space-y-2">
             <div class="flex justify-between items-center">
               <div>
-                <div class="font-medium text-slate-200">背景暗度 (Darkness)</div>
-                <div class="text-[11px] text-slate-400">调整背景遮罩黑度，提高文字对比度</div>
+                <div class="font-medium text-slate-200">
+                  背景暗度 (Darkness)
+                  <span id="setting-overlay-base-display" class="ml-1.5 text-xs text-slate-400 font-normal">基础 30%</span>
+                </div>
+                <div class="text-[11px] text-slate-400">实际暗度随本地时间平滑变化，中午保持基础值，午夜达到 100%</div>
               </div>
-              <span id="setting-overlay-display" class="font-mono text-indigo-300 font-semibold text-xs sm:text-sm bg-indigo-500/20 px-2 py-0.5 rounded-lg">35%</span>
+              <span id="setting-overlay-display" class="font-mono text-indigo-300 font-semibold text-xs sm:text-sm bg-indigo-500/20 px-2 py-0.5 rounded-lg">当前 30%</span>
             </div>
-            <input id="setting-bg-overlay" type="range" min="0" max="90" step="5" value="35" oninput="onSettingOverlayChange(this.value)" class="w-full accent-indigo-500 h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer" />
+            <input id="setting-bg-overlay" type="range" min="0" max="90" step="5" value="30" oninput="onSettingOverlayChange(this.value)" class="w-full accent-indigo-500 h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer" />
           </div>
 
           <!-- 背景模糊度 -->
@@ -819,9 +822,9 @@ function renderWebDashboardHtml() {
     let bgConfig = (() => {
       try {
         const saved = localStorage.getItem('bg_config');
-        return saved ? JSON.parse(saved) : { blur: 2, overlay: 35, source: 'bing', customUrl: '' };
+        return saved ? JSON.parse(saved) : { blur: 2, overlay: 30, source: 'bing', customUrl: '' };
       } catch (e) {
-        return { blur: 2, overlay: 35, source: 'bing', customUrl: '' };
+        return { blur: 2, overlay: 30, source: 'bing', customUrl: '' };
       }
     })();
 
@@ -846,6 +849,20 @@ function renderWebDashboardHtml() {
     async function init() {
       applyBgConfig();
       applyGridConfig();
+
+      // 动态时间暗度监听（每分钟与切回前台时平滑自适应，与插件逻辑一致）
+      setInterval(() => {
+        applyBgConfig();
+        updateOverlaySettingDisplay();
+      }, 60 * 1000);
+
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          applyBgConfig();
+          updateOverlaySettingDisplay();
+        }
+      });
+
       window.addEventListener('resize', () => {
         applyGridConfig();
         if (currentSyncData && currentSyncData.shortcuts) {
@@ -1266,14 +1283,42 @@ function renderWebDashboardHtml() {
       }
     }
 
+    // ⏰ 壁纸暗度时间自适应计算（与插件逻辑一致：中午保持基础暗度，午夜达到 100%）
+    function clamp(val, min, max) {
+      return Math.min(max, Math.max(min, val));
+    }
+
+    function getNightProgress(date = new Date()) {
+      const hours = date.getHours() + date.getMinutes() / 60 + date.getSeconds() / 3600;
+      const distanceFromNoon = ((hours - 12) * Math.PI) / 12;
+      return (1 - Math.cos(distanceFromNoon)) / 2;
+    }
+
+    function getTimeAdjustedOverlay(baseOverlay, date = new Date()) {
+      const numericOverlay = Number(baseOverlay);
+      const safeOverlay = clamp(Number.isFinite(numericOverlay) ? numericOverlay : 30, 0, 100);
+      const nightProgress = getNightProgress(date);
+      return Math.round(safeOverlay + (100 - safeOverlay) * nightProgress);
+    }
+
+    function updateOverlaySettingDisplay() {
+      const baseOverlay = Number(bgConfig.overlay ?? 30);
+      const effectiveOverlay = getTimeAdjustedOverlay(baseOverlay);
+      const baseEl = document.getElementById('setting-overlay-base-display');
+      const curEl = document.getElementById('setting-overlay-display');
+      if (baseEl) baseEl.innerText = '基础 ' + baseOverlay + '%';
+      if (curEl) curEl.innerText = '当前 ' + effectiveOverlay + '%';
+    }
+
     // 🖼️ 动态应用背景遮罩与壁纸设置
     function applyBgConfig() {
       const overlayEl = document.getElementById('bg-overlay');
-      const overlay = Number(bgConfig.overlay ?? 35);
+      const baseOverlay = Number(bgConfig.overlay ?? 30);
+      const effectiveOverlay = getTimeAdjustedOverlay(baseOverlay);
       const blur = Number(bgConfig.blur ?? 2);
 
       if (overlayEl) {
-        overlayEl.style.backgroundColor = 'rgba(2, 6, 23, ' + (overlay / 100) + ')';
+        overlayEl.style.backgroundColor = 'rgba(0, 0, 0, ' + (effectiveOverlay / 100) + ')';
         overlayEl.style.backdropFilter = blur > 0 ? ('blur(' + blur + 'px)') : 'none';
         overlayEl.style.webkitBackdropFilter = blur > 0 ? ('blur(' + blur + 'px)') : 'none';
       }
@@ -1299,8 +1344,9 @@ function renderWebDashboardHtml() {
       const validSearchEngine = ['google', 'bing', 'duckduckgo'].includes(gridConfig.searchEngine) ? gridConfig.searchEngine : 'google';
       document.getElementById('setting-search-engine').value = validSearchEngine;
 
-      document.getElementById('setting-bg-overlay').value = bgConfig.overlay ?? 35;
-      document.getElementById('setting-overlay-display').innerText = (bgConfig.overlay ?? 35) + '%';
+      const baseOverlay = Number(bgConfig.overlay ?? 30);
+      document.getElementById('setting-bg-overlay').value = baseOverlay;
+      updateOverlaySettingDisplay();
 
       document.getElementById('setting-bg-blur').value = bgConfig.blur ?? 2;
       document.getElementById('setting-blur-display').innerText = (bgConfig.blur ?? 2) + 'px';
@@ -1363,9 +1409,9 @@ function renderWebDashboardHtml() {
     }
 
     function onSettingOverlayChange(val) {
-      const num = Number(val) || 35;
-      document.getElementById('setting-overlay-display').innerText = num + '%';
+      const num = Number(val) || 0;
       bgConfig.overlay = num;
+      updateOverlaySettingDisplay();
       applyBgConfig();
     }
 
@@ -1407,7 +1453,7 @@ function renderWebDashboardHtml() {
     function resetDefaultSettings() {
       if (!confirm('确定要恢复默认设置吗？')) return;
       gridConfig = { cols: 5, rows: 4, iconSize: 56, showSearchBar: true, searchEngine: 'google' };
-      bgConfig = { blur: 2, overlay: 35, source: 'bing', customUrl: '' };
+      bgConfig = { blur: 2, overlay: 30, source: 'bing', customUrl: '' };
       localStorage.setItem('grid_config', JSON.stringify(gridConfig));
       localStorage.setItem('bg_config', JSON.stringify(bgConfig));
       applyGridConfig();
