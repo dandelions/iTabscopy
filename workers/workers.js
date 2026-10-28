@@ -320,7 +320,7 @@ function renderWebDashboardHtml() {
 <body class="min-h-screen text-slate-100 font-sans flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
 
   <!-- 背景遮罩层 -->
-  <div class="fixed inset-0 bg-slate-950/60 backdrop-blur-[2px] -z-10"></div>
+  <div id="bg-overlay" class="fixed inset-0 bg-slate-950/60 backdrop-blur-[2px] -z-10 transition-all duration-300"></div>
 
   <!-- 顶部导航栏 -->
   <header class="w-full border-b border-glass-border bg-black/20 backdrop-blur-md sticky top-0 z-30 px-4 sm:px-6 py-3 flex justify-between items-center">
@@ -338,6 +338,15 @@ function renderWebDashboardHtml() {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
         </svg>
         <span id="sync-text">已同步</span>
+      </button>
+      <!-- ⚙️ 系统设置按钮 -->
+      <button id="settings-btn" onclick="openSettingsModal()" title="自定义桌面与背景设置"
+              class="hidden flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-white/10 hover:bg-white/20 text-slate-200 border border-glass-border transition active:scale-95 cursor-pointer select-none">
+        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+        <span class="hidden sm:inline">设置</span>
       </button>
     </div>
 
@@ -430,8 +439,27 @@ function renderWebDashboardHtml() {
 
         <!-- 📌 视图 1: 桌面 (快捷方式) -->
         <div id="view-shortcuts" class="animate-fade">
+          
+          <!-- 🔍 桌面搜索栏 (可通过设置开启/关闭，搜索引擎可选) -->
+          <div id="desktop-search-bar" class="w-full max-w-xl mx-auto mb-4 sm:mb-6">
+            <form onsubmit="handleDesktopSearch(event)" class="relative flex items-center bg-black/35 backdrop-blur-md border border-glass-border rounded-2xl shadow-xl overflow-hidden hover:border-indigo-400/50 transition">
+              <select id="search-engine-select" onchange="changeSearchEngine(this.value)" class="bg-black/40 text-xs sm:text-sm text-slate-200 pl-3 sm:pl-3.5 pr-1.5 py-2.5 sm:py-3 focus:outline-none cursor-pointer border-r border-glass-border [color-scheme:dark]">
+                <option value="google" class="bg-slate-900 text-white">Google</option>
+                <option value="baidu" class="bg-slate-900 text-white">百度</option>
+                <option value="bing" class="bg-slate-900 text-white">Bing</option>
+              </select>
+              <input id="desktop-search-input" type="text" placeholder="输入搜索内容，按回车快速搜索..." class="w-full px-3.5 sm:px-4 py-2.5 sm:py-3 bg-transparent text-xs sm:text-sm text-white placeholder-slate-400 focus:outline-none" />
+              <button type="submit" class="p-2.5 sm:p-3 text-slate-400 hover:text-white transition">
+                <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </button>
+            </form>
+          </div>
+
           <div class="bg-white/[0.07] backdrop-blur-md border border-glass-border rounded-3xl p-4 sm:p-6 shadow-xl min-h-[300px]">
-            <div id="shortcuts-container" class="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-2.5 sm:gap-4">
+            <!-- ⚡ PC 端每行展示不超过 5 个 (最大 5 列，居中优雅展示) -->
+            <div id="shortcuts-container" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3.5 sm:gap-6 max-w-4xl mx-auto py-2">
               <!-- 动态加载桌面图标和文件夹 -->
             </div>
             <div id="shortcuts-empty" class="hidden py-16 text-center text-slate-400 text-xs sm:text-sm">
@@ -578,6 +606,193 @@ function renderWebDashboardHtml() {
     </div>
   </div>
 
+  <!-- ⚙️ 系统设置弹窗 (Settings Modal - 移植自 Chrome 插件版并增强) -->
+  <div id="settings-modal" class="fixed inset-0 bg-black/60 backdrop-blur-md z-50 hidden flex items-center justify-center p-3 sm:p-4 select-none" onclick="handleSettingsBackdropClick(event)">
+    <div id="settings-modal-card" class="bg-slate-900/95 border border-white/20 rounded-3xl max-w-lg sm:max-w-xl w-full p-4 sm:p-6 shadow-2xl flex flex-col max-h-[88vh] text-slate-100 animate-fade">
+      
+      <!-- 弹窗顶部栏 -->
+      <div class="flex items-center justify-between pb-3 sm:pb-4 border-b border-glass-border mb-3 sm:mb-4 shrink-0">
+        <div class="flex items-center gap-2">
+          <div class="p-1.5 rounded-xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+            <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </div>
+          <h3 class="font-bold text-base sm:text-lg text-white">系统设置</h3>
+        </div>
+        <button onclick="closeSettingsModal()" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+        </button>
+      </div>
+
+      <!-- 选项卡 Tabs 切换 (通用布局 / 壁纸背景 / 数据管理 / 关于) -->
+      <div class="flex items-center gap-1 p-1 bg-black/40 rounded-xl mb-4 border border-glass-border shrink-0 text-xs sm:text-sm">
+        <button id="set-tab-btn-layout" onclick="switchSettingTab('layout')" class="flex-1 py-1.5 rounded-lg font-medium transition bg-indigo-600 text-white shadow-sm">布局外观</button>
+        <button id="set-tab-btn-wallpaper" onclick="switchSettingTab('wallpaper')" class="flex-1 py-1.5 rounded-lg font-medium transition text-slate-400 hover:text-white">壁纸背景</button>
+        <button id="set-tab-btn-data" onclick="switchSettingTab('data')" class="flex-1 py-1.5 rounded-lg font-medium transition text-slate-400 hover:text-white">数据同步</button>
+        <button id="set-tab-btn-about" onclick="switchSettingTab('about')" class="flex-1 py-1.5 rounded-lg font-medium transition text-slate-400 hover:text-white">关于</button>
+      </div>
+
+      <!-- 设置内容区 -->
+      <div class="flex-1 overflow-y-auto pr-1 space-y-4 custom-scrollbar text-xs sm:text-sm min-h-0">
+        
+        <!-- 🖥️ 1. 布局与外观 -->
+        <div id="set-panel-layout" class="space-y-4">
+          <!-- PC 端列数限制 -->
+          <div class="p-3 bg-white/5 rounded-2xl border border-white/10 space-y-2">
+            <div class="flex justify-between items-center">
+              <div>
+                <div class="font-medium text-slate-200">PC端每行列数 (Cols)</div>
+                <div class="text-[11px] text-slate-400">电脑宽屏端最多展示 5 列，支持 2~5 列自由调整</div>
+              </div>
+              <span id="setting-cols-display" class="font-mono text-indigo-300 font-semibold text-xs sm:text-sm bg-indigo-500/20 px-2 py-0.5 rounded-lg">5 列</span>
+            </div>
+            <input id="setting-grid-cols" type="range" min="2" max="5" step="1" value="5" oninput="onSettingColsChange(this.value)" class="w-full accent-indigo-500 h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer" />
+          </div>
+
+          <!-- 图标大小 -->
+          <div class="p-3 bg-white/5 rounded-2xl border border-white/10 space-y-2">
+            <div class="flex justify-between items-center">
+              <div>
+                <div class="font-medium text-slate-200">图标尺寸 (Icon Size)</div>
+                <div class="text-[11px] text-slate-400">调整快捷方式图标整体大小</div>
+              </div>
+              <span id="setting-iconsize-display" class="font-mono text-indigo-300 font-semibold text-xs sm:text-sm bg-indigo-500/20 px-2 py-0.5 rounded-lg">56px</span>
+            </div>
+            <input id="setting-icon-size" type="range" min="44" max="76" step="2" value="56" oninput="onSettingIconSizeChange(this.value)" class="w-full accent-indigo-500 h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer" />
+          </div>
+
+          <!-- 显示搜索栏开关 -->
+          <div class="p-3 bg-white/5 rounded-2xl border border-white/10 flex items-center justify-between">
+            <div>
+              <div class="font-medium text-slate-200">显示桌面搜索栏</div>
+              <div class="text-[11px] text-slate-400">在快捷方式上方展示搜索引擎输入框</div>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input id="setting-show-search" type="checkbox" checked onchange="onSettingShowSearchChange(this.checked)" class="sr-only peer">
+              <div class="w-11 h-6 bg-white/20 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+            </label>
+          </div>
+
+          <!-- 默认搜索引擎 -->
+          <div class="p-3 bg-white/5 rounded-2xl border border-white/10 flex items-center justify-between">
+            <div>
+              <div class="font-medium text-slate-200">默认搜索引擎</div>
+              <div class="text-[11px] text-slate-400">回车搜索时使用的搜索引擎服务</div>
+            </div>
+            <select id="setting-search-engine" onchange="onSettingSearchEngineChange(this.value)" class="bg-black/40 border border-glass-border rounded-xl px-2.5 py-1.5 text-xs text-slate-200 [color-scheme:dark]">
+              <option value="google">Google</option>
+              <option value="baidu">百度</option>
+              <option value="bing">Bing</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 🖼️ 2. 壁纸与背景 -->
+        <div id="set-panel-wallpaper" class="hidden space-y-4">
+          <!-- 壁纸暗度 -->
+          <div class="p-3 bg-white/5 rounded-2xl border border-white/10 space-y-2">
+            <div class="flex justify-between items-center">
+              <div>
+                <div class="font-medium text-slate-200">背景暗度 (Darkness)</div>
+                <div class="text-[11px] text-slate-400">调整背景遮罩黑度，提高文字对比度</div>
+              </div>
+              <span id="setting-overlay-display" class="font-mono text-indigo-300 font-semibold text-xs sm:text-sm bg-indigo-500/20 px-2 py-0.5 rounded-lg">35%</span>
+            </div>
+            <input id="setting-bg-overlay" type="range" min="0" max="90" step="5" value="35" oninput="onSettingOverlayChange(this.value)" class="w-full accent-indigo-500 h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer" />
+          </div>
+
+          <!-- 背景模糊度 -->
+          <div class="p-3 bg-white/5 rounded-2xl border border-white/10 space-y-2">
+            <div class="flex justify-between items-center">
+              <div>
+                <div class="font-medium text-slate-200">高斯模糊 (Blur)</div>
+                <div class="text-[11px] text-slate-400">调整背景虚化程度，带来高级磨砂质感</div>
+              </div>
+              <span id="setting-blur-display" class="font-mono text-indigo-300 font-semibold text-xs sm:text-sm bg-indigo-500/20 px-2 py-0.5 rounded-lg">2px</span>
+            </div>
+            <input id="setting-bg-blur" type="range" min="0" max="20" step="1" value="2" oninput="onSettingBlurChange(this.value)" class="w-full accent-indigo-500 h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer" />
+          </div>
+
+          <!-- 壁纸源选择与刷新 -->
+          <div class="p-3 bg-white/5 rounded-2xl border border-white/10 space-y-3">
+            <div class="flex justify-between items-center">
+              <div>
+                <div class="font-medium text-slate-200">壁纸来源</div>
+                <div class="text-[11px] text-slate-400">Bing 每日官方壁纸或自定义图片</div>
+              </div>
+              <button onclick="refreshBingWallpaperNow()" class="px-2.5 py-1 text-xs bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 rounded-lg border border-indigo-500/40 flex items-center gap-1 transition">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                <span>换一张</span>
+              </button>
+            </div>
+            <div class="space-y-1.5">
+              <label class="text-[11px] text-slate-400">自定义壁纸图片 URL (选填):</label>
+              <input id="setting-custom-bg" type="url" placeholder="https://example.com/wallpaper.jpg" oninput="onSettingCustomBgChange(this.value)" class="w-full px-3 py-2 bg-black/40 border border-glass-border rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-400 transition" />
+            </div>
+          </div>
+        </div>
+
+        <!-- 🔄 3. 数据管理与备份 -->
+        <div id="set-panel-data" class="hidden space-y-4">
+          <div class="p-3 bg-white/5 rounded-2xl border border-white/10 space-y-2">
+            <div class="font-medium text-slate-200">云端账号信息</div>
+            <div class="text-[11px] text-slate-400">当前已登录：<span id="setting-account-email" class="text-indigo-300 font-mono">未登录</span></div>
+            <div class="text-[11px] text-slate-400">所有数据通过 Cloudflare Workers KV 强加密云端持久化。</div>
+          </div>
+
+          <div class="p-3 bg-white/5 rounded-2xl border border-white/10 space-y-3">
+            <div class="font-medium text-slate-200">数据导入与备份导出</div>
+            <div class="text-[11px] text-slate-400 leading-relaxed">
+              支持与 Chrome 扩展完整双向互通，可直接备份或恢复图标、待办、笔记与设置。
+            </div>
+            <div class="flex flex-wrap gap-2 pt-1">
+              <button onclick="exportAllBackupData()" class="px-3.5 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-medium flex items-center gap-1.5 transition">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                <span>导出备份 JSON</span>
+              </button>
+              <label class="px-3.5 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-xl text-xs font-medium flex items-center gap-1.5 transition cursor-pointer">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                <span>导入备份恢复</span>
+                <input type="file" accept=".json" onchange="importBackupDataFile(event)" class="hidden" />
+              </label>
+              <button onclick="manualSync()" class="px-3.5 py-2 bg-white/10 hover:bg-white/20 text-slate-200 border border-glass-border rounded-xl text-xs font-medium flex items-center gap-1.5 transition">
+                <span>立即云端同步</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ℹ️ 4. 关于系统 -->
+        <div id="set-panel-about" class="hidden space-y-3">
+          <div class="p-3 bg-white/5 rounded-2xl border border-white/10 space-y-2">
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-white text-base">iTabs Web</span>
+              <span class="px-2 py-0.5 rounded-full text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">v1.36.0</span>
+            </div>
+            <p class="text-[11px] text-slate-400 leading-relaxed">
+              现代、极速、高颜值的全端 New Tab 云桌面。纯原生轻量单文件部署于 Cloudflare Workers，不依赖外部前端构建托管，支持与 Chrome/Edge 浏览器扩展无缝云端双向同步。
+            </p>
+          </div>
+          <div class="p-3 bg-white/5 rounded-2xl border border-white/10 space-y-1.5 text-[11px] text-slate-400">
+            <div>&bull; 快捷键：<span class="text-slate-200 font-mono">Esc</span> 快速关闭弹窗</div>
+            <div>&bull; 笔记全选：<span class="text-slate-200 font-mono">Ctrl+A / Cmd+A</span> 仅精准全选正文</div>
+            <div>&bull; 快捷操作：支持右侧工具栏一键复制全文与待办时间管理</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- 弹窗底部操作按钮 -->
+      <div class="pt-3 border-t border-glass-border mt-3 flex justify-between items-center shrink-0">
+        <button onclick="resetDefaultSettings()" class="text-xs text-slate-400 hover:text-rose-400 transition">恢复默认设置</button>
+        <button onclick="saveAndApplySettings()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs sm:text-sm font-medium shadow-lg shadow-indigo-600/30 transition">保存并同步</button>
+      </div>
+
+    </div>
+  </div>
+
   <footer class="py-3 sm:py-4 text-center text-[11px] text-slate-500 border-t border-glass-border/40">
     iTabs Cloud Dashboard &bull; Powered by Cloudflare Workers
   </footer>
@@ -588,6 +803,27 @@ function renderWebDashboardHtml() {
     let selectedNoteIndex = -1;
     let isCreatingNote = false;
     let currentTab = 'shortcuts';
+
+    // ⚙️ 默认布局与背景配置 (与 Chrome 插件版本数据格式 100% 对齐)
+    let gridConfig = (() => {
+      try {
+        const saved = localStorage.getItem('grid_config');
+        return saved ? JSON.parse(saved) : { cols: 5, rows: 4, iconSize: 56, showSearchBar: true, searchEngine: 'google' };
+      } catch (e) {
+        return { cols: 5, rows: 4, iconSize: 56, showSearchBar: true, searchEngine: 'google' };
+      }
+    })();
+    // 严格限制 PC 端最多不超过 5 列
+    if (!gridConfig.cols || Number(gridConfig.cols) > 5) gridConfig.cols = 5;
+
+    let bgConfig = (() => {
+      try {
+        const saved = localStorage.getItem('bg_config');
+        return saved ? JSON.parse(saved) : { blur: 2, overlay: 35, source: 'bing', customUrl: '' };
+      } catch (e) {
+        return { blur: 2, overlay: 35, source: 'bing', customUrl: '' };
+      }
+    })();
 
     // 🗂️ Tab 切换逻辑 (桌面 / 待办 / 笔记)
     function switchTab(tab) {
@@ -608,12 +844,18 @@ function renderWebDashboardHtml() {
     }
 
     async function init() {
+      applyBgConfig();
+      applyGridConfig();
+      window.addEventListener('resize', applyGridConfig);
       loadBingWallpaper();
       const token = localStorage.getItem('itabs_token') || localStorage.getItem('sync_token');
       const email = localStorage.getItem('itabs_email') || localStorage.getItem('sync_email');
 
       window.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') closeFolderModal();
+        if (e.key === 'Escape') {
+          closeFolderModal();
+          closeSettingsModal();
+        }
 
         // 优化全选操作：在笔记区域按全选快捷键时，仅选择笔记正文内容
         if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) {
@@ -718,6 +960,17 @@ function renderWebDashboardHtml() {
         }
         const result = await res.json();
         currentSyncData = result.data || { shortcuts: [], todos: [], notes: [] };
+        if (currentSyncData.gridConfig && typeof currentSyncData.gridConfig === 'object') {
+          gridConfig = { ...gridConfig, ...currentSyncData.gridConfig };
+          if (gridConfig.cols > 5) gridConfig.cols = 5;
+          localStorage.setItem('grid_config', JSON.stringify(gridConfig));
+        }
+        if (currentSyncData.bgConfig && typeof currentSyncData.bgConfig === 'object') {
+          bgConfig = { ...bgConfig, ...currentSyncData.bgConfig };
+          localStorage.setItem('bg_config', JSON.stringify(bgConfig));
+        }
+        applyGridConfig();
+        applyBgConfig();
         renderDashboard(currentSyncData);
         if (syncText) syncText.innerText = '已同步';
         if (syncBtn) {
@@ -754,6 +1007,17 @@ function renderWebDashboardHtml() {
         const result = await res.json();
         if (result.data) {
           currentSyncData = result.data;
+          if (currentSyncData.gridConfig && typeof currentSyncData.gridConfig === 'object') {
+            gridConfig = { ...gridConfig, ...currentSyncData.gridConfig };
+            if (gridConfig.cols > 5) gridConfig.cols = 5;
+            localStorage.setItem('grid_config', JSON.stringify(gridConfig));
+          }
+          if (currentSyncData.bgConfig && typeof currentSyncData.bgConfig === 'object') {
+            bgConfig = { ...bgConfig, ...currentSyncData.bgConfig };
+            localStorage.setItem('bg_config', JSON.stringify(bgConfig));
+          }
+          applyGridConfig();
+          applyBgConfig();
           renderDashboard(result.data);
         }
         syncText.innerText = '已同步';
@@ -785,6 +1049,8 @@ function renderWebDashboardHtml() {
         syncBtn.className = 'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30 transition';
       }
 
+      currentSyncData.gridConfig = gridConfig;
+      currentSyncData.bgConfig = bgConfig;
       const baseUpdatedAt = currentSyncData.updatedAt || 0;
       const newUpdatedAt = Date.now();
       const payload = {
@@ -889,6 +1155,7 @@ function renderWebDashboardHtml() {
 
     // 渲染桌面图标
     function renderShortcuts(shortcuts) {
+      applyGridConfig();
       const container = document.getElementById('shortcuts-container');
       const emptyEl = document.getElementById('shortcuts-empty');
       document.getElementById('shortcuts-count').innerText = shortcuts.length;
@@ -899,6 +1166,8 @@ function renderWebDashboardHtml() {
         return;
       }
       emptyEl.classList.add('hidden');
+
+      const iconSize = Math.min(80, Math.max(44, Number(gridConfig.iconSize) || 56));
 
       container.innerHTML = shortcuts.map((s, idx) => {
         const isFolder = s.type === 'folder';
@@ -912,7 +1181,8 @@ function renderWebDashboardHtml() {
           return \`
             <div onclick="openFolderModal('\${s.id || idx}')"
                  class="group flex flex-col items-center justify-center p-1 cursor-pointer select-none">
-              <div class="w-11 h-11 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl mb-1 p-1 sm:p-1.5 bg-white/15 hover:bg-white/25 backdrop-blur-md border border-white/20 shadow-md shadow-black/30 grid \${gridCols} gap-0.5 sm:gap-1 items-center justify-center overflow-hidden group-hover:scale-108 transition-all duration-200">
+              <div style="width: \${iconSize}px; height: \${iconSize}px;"
+                   class="rounded-xl sm:rounded-2xl mb-1.5 p-1 sm:p-1.5 bg-white/15 hover:bg-white/25 backdrop-blur-md border border-white/20 shadow-md shadow-black/30 grid \${gridCols} gap-0.5 sm:gap-1 items-center justify-center overflow-hidden group-hover:scale-108 transition-all duration-200">
                 \${previewIcons.map(child => {
                   const fallback = generateLetterAvatar(child.title || child.name || 'W', 32);
                   return \`<img src="\${getShortcutIcon(child)}" class="w-full h-full object-contain rounded-[2px] sm:rounded-xs" onerror="this.onerror=null;this.src='\${fallback}'" />\`;
@@ -933,7 +1203,8 @@ function renderWebDashboardHtml() {
         return \`
           <a href="\${url}" target="_blank" rel="noopener noreferrer"
              class="group flex flex-col items-center justify-center p-1 cursor-pointer select-none">
-            <div class="w-11 h-11 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl mb-1 flex items-center justify-center overflow-hidden p-1.5 sm:p-2 bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/15 shadow-md shadow-black/30 group-hover:scale-108 transition-all duration-200">
+            <div style="width: \${iconSize}px; height: \${iconSize}px;"
+                 class="rounded-xl sm:rounded-2xl mb-1.5 flex items-center justify-center overflow-hidden p-1.5 sm:p-2 bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/15 shadow-md shadow-black/30 group-hover:scale-108 transition-all duration-200">
               <img src="\${iconSrc}" alt="\${title}" class="w-full h-full object-contain rounded-md sm:rounded-lg" onerror="this.onerror=null;this.src='\${fallbackIcon}'" />
             </div>
             <span class="text-[11px] sm:text-xs font-medium text-slate-200 group-hover:text-white truncate w-full text-center tracking-tight leading-tight">
@@ -942,6 +1213,284 @@ function renderWebDashboardHtml() {
           </a>
         \`;
       }).join('');
+    }
+
+    // 🖥️ 动态应用网格与布局设置 (严格控制 PC 端列数不超过 5)
+    function applyGridConfig() {
+      const container = document.getElementById('shortcuts-container');
+      if (!container) return;
+      // 严格限制 PC 端最多 5 列
+      const cols = Math.min(5, Math.max(2, Number(gridConfig.cols) || 5));
+
+      if (window.innerWidth >= 768) {
+        container.style.gridTemplateColumns = 'repeat(' + cols + ', minmax(0, 1fr))';
+      } else if (window.innerWidth >= 640) {
+        container.style.gridTemplateColumns = 'repeat(' + Math.min(cols, 4) + ', minmax(0, 1fr))';
+      } else {
+        container.style.gridTemplateColumns = 'repeat(' + Math.min(cols, 3) + ', minmax(0, 1fr))';
+      }
+
+      // 搜索栏显示与隐藏
+      const searchBar = document.getElementById('desktop-search-bar');
+      if (searchBar) {
+        if (gridConfig.showSearchBar !== false) {
+          searchBar.classList.remove('hidden');
+        } else {
+          searchBar.classList.add('hidden');
+        }
+      }
+
+      const selectEl = document.getElementById('search-engine-select');
+      if (selectEl && gridConfig.searchEngine) {
+        selectEl.value = gridConfig.searchEngine;
+      }
+    }
+
+    // 🖼️ 动态应用背景遮罩与壁纸设置
+    function applyBgConfig() {
+      const overlayEl = document.getElementById('bg-overlay');
+      const overlay = Number(bgConfig.overlay ?? 35);
+      const blur = Number(bgConfig.blur ?? 2);
+
+      if (overlayEl) {
+        overlayEl.style.backgroundColor = 'rgba(2, 6, 23, ' + (overlay / 100) + ')';
+        overlayEl.style.backdropFilter = blur > 0 ? ('blur(' + blur + 'px)') : 'none';
+        overlayEl.style.webkitBackdropFilter = blur > 0 ? ('blur(' + blur + 'px)') : 'none';
+      }
+
+      if (bgConfig.customUrl && bgConfig.source === 'custom') {
+        document.body.style.backgroundImage = 'url(\"' + bgConfig.customUrl + '\")';
+      }
+    }
+
+    // ⚙️ 系统设置相关交互逻辑
+    let currentSettingTab = 'layout';
+
+    function openSettingsModal() {
+      document.getElementById('settings-modal').classList.remove('hidden');
+
+      document.getElementById('setting-grid-cols').value = gridConfig.cols || 5;
+      document.getElementById('setting-cols-display').innerText = (gridConfig.cols || 5) + ' 列';
+
+      document.getElementById('setting-icon-size').value = gridConfig.iconSize || 56;
+      document.getElementById('setting-iconsize-display').innerText = (gridConfig.iconSize || 56) + 'px';
+
+      document.getElementById('setting-show-search').checked = gridConfig.showSearchBar !== false;
+      document.getElementById('setting-search-engine').value = gridConfig.searchEngine || 'google';
+
+      document.getElementById('setting-bg-overlay').value = bgConfig.overlay ?? 35;
+      document.getElementById('setting-overlay-display').innerText = (bgConfig.overlay ?? 35) + '%';
+
+      document.getElementById('setting-bg-blur').value = bgConfig.blur ?? 2;
+      document.getElementById('setting-blur-display').innerText = (bgConfig.blur ?? 2) + 'px';
+
+      document.getElementById('setting-custom-bg').value = bgConfig.customUrl || '';
+
+      const email = localStorage.getItem('itabs_email') || localStorage.getItem('sync_email') || '未登录';
+      document.getElementById('setting-account-email').innerText = email;
+
+      switchSettingTab(currentSettingTab);
+    }
+
+    function closeSettingsModal() {
+      document.getElementById('settings-modal').classList.add('hidden');
+    }
+
+    function handleSettingsBackdropClick(e) {
+      if (e.target.id === 'settings-modal') closeSettingsModal();
+    }
+
+    function switchSettingTab(tab) {
+      currentSettingTab = tab;
+      const tabs = ['layout', 'wallpaper', 'data', 'about'];
+      tabs.forEach(t => {
+        const btn = document.getElementById('set-tab-btn-' + t);
+        const panel = document.getElementById('set-panel-' + t);
+        if (t === tab) {
+          if (panel) panel.classList.remove('hidden');
+          if (btn) btn.className = 'flex-1 py-1.5 rounded-lg font-medium transition bg-indigo-600 text-white shadow-sm';
+        } else {
+          if (panel) panel.classList.add('hidden');
+          if (btn) btn.className = 'flex-1 py-1.5 rounded-lg font-medium transition text-slate-400 hover:text-white';
+        }
+      });
+    }
+
+    function onSettingColsChange(val) {
+      const num = Math.min(5, Math.max(2, Number(val) || 5));
+      document.getElementById('setting-cols-display').innerText = num + ' 列';
+      gridConfig.cols = num;
+      applyGridConfig();
+    }
+
+    function onSettingIconSizeChange(val) {
+      const num = Number(val) || 56;
+      document.getElementById('setting-iconsize-display').innerText = num + 'px';
+      gridConfig.iconSize = num;
+      renderShortcuts(currentSyncData?.shortcuts || []);
+    }
+
+    function onSettingShowSearchChange(checked) {
+      gridConfig.showSearchBar = checked;
+      applyGridConfig();
+    }
+
+    function onSettingSearchEngineChange(val) {
+      gridConfig.searchEngine = val;
+      const selectEl = document.getElementById('search-engine-select');
+      if (selectEl) selectEl.value = val;
+    }
+
+    function onSettingOverlayChange(val) {
+      const num = Number(val) || 35;
+      document.getElementById('setting-overlay-display').innerText = num + '%';
+      bgConfig.overlay = num;
+      applyBgConfig();
+    }
+
+    function onSettingBlurChange(val) {
+      const num = Number(val) || 0;
+      document.getElementById('setting-blur-display').innerText = num + 'px';
+      bgConfig.blur = num;
+      applyBgConfig();
+    }
+
+    function onSettingCustomBgChange(val) {
+      bgConfig.customUrl = val.trim();
+      if (bgConfig.customUrl) {
+        bgConfig.source = 'custom';
+        document.body.style.backgroundImage = 'url(\"' + bgConfig.customUrl + '\")';
+      } else {
+        bgConfig.source = 'bing';
+        loadBingWallpaper();
+      }
+    }
+
+    async function refreshBingWallpaperNow() {
+      try {
+        const res = await fetch('/api/bing');
+        if (res.ok) {
+          const { url } = await res.json();
+          if (url) {
+            bgConfig.source = 'bing';
+            bgConfig.customUrl = '';
+            document.getElementById('setting-custom-bg').value = '';
+            document.body.style.backgroundImage = 'url(\"' + url + '\")';
+          }
+        }
+      } catch (e) {
+        console.warn('刷新壁纸失败');
+      }
+    }
+
+    function resetDefaultSettings() {
+      if (!confirm('确定要恢复默认设置吗？')) return;
+      gridConfig = { cols: 5, rows: 4, iconSize: 56, showSearchBar: true, searchEngine: 'google' };
+      bgConfig = { blur: 2, overlay: 35, source: 'bing', customUrl: '' };
+      localStorage.setItem('grid_config', JSON.stringify(gridConfig));
+      localStorage.setItem('bg_config', JSON.stringify(bgConfig));
+      applyGridConfig();
+      applyBgConfig();
+      loadBingWallpaper();
+      renderShortcuts(currentSyncData?.shortcuts || []);
+      closeSettingsModal();
+      saveToCloud();
+    }
+
+    function saveAndApplySettings() {
+      localStorage.setItem('grid_config', JSON.stringify(gridConfig));
+      localStorage.setItem('bg_config', JSON.stringify(bgConfig));
+      if (!currentSyncData) currentSyncData = { shortcuts: [], todos: [], notes: [] };
+      currentSyncData.gridConfig = gridConfig;
+      currentSyncData.bgConfig = bgConfig;
+      applyGridConfig();
+      applyBgConfig();
+      closeSettingsModal();
+      saveToCloud();
+    }
+
+    // 🔍 桌面搜索处理
+    const SEARCH_ENGINES = {
+      google: 'https://www.google.com/search?q=',
+      baidu: 'https://www.baidu.com/s?wd=',
+      bing: 'https://cn.bing.com/search?q='
+    };
+
+    function handleDesktopSearch(e) {
+      e.preventDefault();
+      const input = document.getElementById('desktop-search-input');
+      const query = input ? input.value.trim() : '';
+      if (!query) return;
+      const engine = gridConfig.searchEngine || 'google';
+      const baseUrl = SEARCH_ENGINES[engine] || SEARCH_ENGINES.google;
+      window.open(baseUrl + encodeURIComponent(query), '_blank');
+    }
+
+    function changeSearchEngine(engine) {
+      gridConfig.searchEngine = engine;
+      localStorage.setItem('grid_config', JSON.stringify(gridConfig));
+      const setSelect = document.getElementById('setting-search-engine');
+      if (setSelect) setSelect.value = engine;
+      saveToCloud();
+    }
+
+    // 📦 数据导出备份与导入恢复 (支持与 Chrome 插件互通)
+    function exportAllBackupData() {
+      const data = {
+        shortcuts: currentSyncData?.shortcuts || [],
+        todos: currentSyncData?.todos || [],
+        notes: currentSyncData?.notes || [],
+        gridConfig: gridConfig,
+        bgConfig: bgConfig,
+        exportedAt: Date.now(),
+        version: '1.36.0'
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'itabs-backup-' + new Date().toISOString().split('T')[0] + '.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function importBackupDataFile(event) {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const data = JSON.parse(e.target.result);
+          if (!data || typeof data !== 'object') throw new Error('无效的 JSON 格式');
+
+          if (!currentSyncData) currentSyncData = { shortcuts: [], todos: [], notes: [] };
+          if (Array.isArray(data.shortcuts)) currentSyncData.shortcuts = data.shortcuts;
+          if (Array.isArray(data.todos)) currentSyncData.todos = data.todos;
+          if (Array.isArray(data.notes)) currentSyncData.notes = data.notes;
+
+          if (data.gridConfig && typeof data.gridConfig === 'object') {
+            gridConfig = { ...gridConfig, ...data.gridConfig };
+            if (gridConfig.cols > 5) gridConfig.cols = 5;
+            localStorage.setItem('grid_config', JSON.stringify(gridConfig));
+          }
+          if (data.bgConfig && typeof data.bgConfig === 'object') {
+            bgConfig = { ...bgConfig, ...data.bgConfig };
+            localStorage.setItem('bg_config', JSON.stringify(bgConfig));
+          }
+
+          renderDashboard(currentSyncData);
+          applyGridConfig();
+          applyBgConfig();
+          saveToCloud();
+          alert('数据恢复成功！已同步至云端。');
+          closeSettingsModal();
+        } catch (err) {
+          alert('导入失败: ' + err.message);
+        }
+      };
+      reader.readAsText(file);
     }
 
     // 文件夹弹窗
@@ -1409,6 +1958,7 @@ function renderWebDashboardHtml() {
       document.getElementById('logout-btn').classList.add('hidden');
       document.getElementById('user-email-text').innerText = '';
       const sBtn = document.getElementById('sync-btn'); if (sBtn) sBtn.classList.add('hidden');
+      const setBtn = document.getElementById('settings-btn'); if (setBtn) setBtn.classList.add('hidden');
     }
 
     function showDashboardView(email) {
@@ -1418,6 +1968,8 @@ function renderWebDashboardHtml() {
       document.getElementById('user-email-text').innerText = email || '';
       const syncBtn = document.getElementById('sync-btn');
       if (syncBtn) syncBtn.classList.remove('hidden');
+      const setBtn = document.getElementById('settings-btn');
+      if (setBtn) setBtn.classList.remove('hidden');
       switchTab('shortcuts'); // 默认展示“桌面”
     }
 
