@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { X, Plus, Trash2, Check, Download, Upload, Search, StickyNote, ClipboardList, Circle, CheckCircle2, PanelLeftClose, PanelLeftOpen, RefreshCw } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { X, Plus, Trash2, Check, Download, Upload, Search, StickyNote, ClipboardList, Circle, CheckCircle2, PanelLeftClose, PanelLeftOpen, RefreshCw, Copy, Clock, Calendar } from 'lucide-react';
 import { marked } from 'marked';
 
 const formatTime = (iso) => {
@@ -34,14 +34,52 @@ const formatShortTime = (iso) => {
     }
 };
 
-function TodoRow({ todo, onToggleTodo, onDeleteTodo }) {
+const formatTodoTime = (isoOrStr) => {
+    if (!isoOrStr) return '';
+    try {
+        const d = new Date(isoOrStr);
+        if (isNaN(d.getTime())) return isoOrStr;
+        const now = new Date();
+        const isToday = d.toDateString() === now.toDateString();
+        const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+        if (isToday) return '今天 ' + timeStr;
+        const isThisYear = d.getFullYear() === now.getFullYear();
+        const dateStr = isThisYear
+            ? `${d.getMonth() + 1}月${d.getDate()}日`
+            : `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+        return `${dateStr} ${timeStr}`;
+    } catch {
+        return isoOrStr;
+    }
+};
+
+const checkIsOverdue = (dueDate, completed) => {
+    if (completed || !dueDate) return false;
+    try {
+        return new Date(dueDate).getTime() < Date.now();
+    } catch {
+        return false;
+    }
+};
+
+function TodoRow({ todo, onToggleTodo, onDeleteTodo, onUpdateTodo }) {
     const [isConfirming, setIsConfirming] = useState(false);
+    const [isEditingTime, setIsEditingTime] = useState(false);
+    const [tempTime, setTempTime] = useState(todo.dueDate || todo.time || '');
 
     useEffect(() => {
         if (!isConfirming) return undefined;
         const timer = setTimeout(() => setIsConfirming(false), 2500);
         return () => clearTimeout(timer);
     }, [isConfirming]);
+
+    const dueDateVal = todo.dueDate || todo.time;
+    const isOverdue = checkIsOverdue(dueDateVal, todo.completed);
+
+    const handleSaveTime = (newVal) => {
+        onUpdateTodo?.(todo.id, { dueDate: newVal || null });
+        setIsEditingTime(false);
+    };
 
     return (
         <div className={`rounded-xl border border-white/10 bg-white/5 p-4 transition ${todo.completed ? 'opacity-60' : ''}`}>
@@ -55,9 +93,80 @@ function TodoRow({ todo, onToggleTodo, onDeleteTodo }) {
                     {todo.completed ? <CheckCircle2 className="h-5 w-5" /> : <Circle className="h-5 w-5" />}
                 </button>
                 <div className="min-w-0 flex-1">
-                    <div className={`text-sm leading-6 ${todo.completed ? 'text-white/50 line-through' : 'text-white/90'}`}>
+                    <div className={`text-sm leading-6 break-words ${todo.completed ? 'text-white/50 line-through' : 'text-white/90'}`}>
                         {todo.text}
                     </div>
+
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                        {isEditingTime ? (
+                            <div className="flex items-center gap-1.5 bg-black/40 rounded-lg p-1 border border-white/20">
+                                <input
+                                    type="datetime-local"
+                                    value={tempTime}
+                                    onChange={(e) => setTempTime(e.target.value)}
+                                    className="bg-transparent text-xs text-white outline-none [color-scheme:dark] px-1"
+                                    autoFocus
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => handleSaveTime(tempTime)}
+                                    className="p-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-xs transition"
+                                    title="保存时间"
+                                >
+                                    <Check className="h-3 w-3" />
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setTempTime('');
+                                        handleSaveTime('');
+                                    }}
+                                    className="p-1 rounded hover:bg-white/10 text-white/50 text-xs transition"
+                                    title="清除时间"
+                                >
+                                    <X className="h-3 w-3" />
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-2">
+                                {dueDateVal ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setTempTime(dueDateVal);
+                                            setIsEditingTime(true);
+                                        }}
+                                        className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs transition hover:bg-white/10 ${
+                                            isOverdue ? 'text-rose-400 bg-rose-500/10 font-medium' : 'text-sky-300 bg-sky-500/10'
+                                        }`}
+                                        title="点击修改指定时间"
+                                    >
+                                        <Clock className="h-3.5 w-3.5 shrink-0" />
+                                        <span>{formatTodoTime(dueDateVal)}</span>
+                                        {isOverdue && (
+                                            <span className="rounded bg-rose-500/20 px-1 py-0.2 text-[9px] text-rose-300 font-semibold">
+                                                已超期
+                                            </span>
+                                        )}
+                                    </button>
+                                ) : !todo.completed ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setTempTime('');
+                                            setIsEditingTime(true);
+                                        }}
+                                        className="flex items-center gap-1 text-[11px] text-white/35 hover:text-white/70 transition"
+                                        title="指定时间"
+                                    >
+                                        <Calendar className="h-3 w-3" />
+                                        <span>指定时间</span>
+                                    </button>
+                                ) : null}
+                            </div>
+                        )}
+                    </div>
+
                     <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/40">
                         <span>创建: {formatTime(todo.createdAt)}</span>
                         {todo.completedAt && <span>完成: {formatTime(todo.completedAt)}</span>}
@@ -96,6 +205,7 @@ export default function NotesPanel({
   onImportNotes,
   todos = [],
   onAddTodo,
+  onUpdateTodo,
   onToggleTodo,
   onDeleteTodo,
   onRefreshFromCloud,
@@ -107,8 +217,11 @@ export default function NotesPanel({
     const [searchQuery, setSearchQuery] = useState('');
     const [activeSection, setActiveSection] = useState('notes');
     const [todoInput, setTodoInput] = useState('');
+    const [todoTime, setTodoTime] = useState('');
     const [isSidebarHidden, setIsSidebarHidden] = useState(false);
     const [refreshState, setRefreshState] = useState('idle');
+    const [copyState, setCopyState] = useState(false);
+    const titleInputRef = useRef(null);
     const activeNote = useMemo(() => notes.find(n => n.id === activeNoteId) || null, [notes, activeNoteId]);
     const activeNoteContent = activeNote?.content || '';
     const activeTodos = useMemo(() => todos.filter(todo => !todo.completed), [todos]);
@@ -197,12 +310,34 @@ export default function NotesPanel({
         input.click();
     };
 
+    const handleCopyNoteContent = async () => {
+        if (!activeNote) return;
+        try {
+            await navigator.clipboard.writeText(activeNote.content || '');
+            setCopyState(true);
+            setTimeout(() => setCopyState(false), 2000);
+        } catch (e) {
+            console.error('Failed to copy note content:', e);
+        }
+    };
+
+    const handleAddNoteClick = () => {
+        onAddNote?.();
+        setTimeout(() => {
+            if (titleInputRef.current) {
+                titleInputRef.current.focus();
+                titleInputRef.current.select();
+            }
+        }, 60);
+    };
+
     const handleTodoSubmit = (e) => {
         e.preventDefault();
         const text = todoInput.trim();
         if (!text) return;
-        onAddTodo?.(text);
+        onAddTodo?.(text, todoTime || null);
         setTodoInput('');
+        setTodoTime('');
     };
 
     const handleRefreshFromCloud = async () => {
@@ -323,8 +458,8 @@ export default function NotesPanel({
                                         <Download className="h-4 w-4" />
                                     </button>
                                     <button
-                                        onClick={onAddNote}
-                                        className="ml-auto p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition flex items-center gap-1 text-sm"
+                                        onClick={handleAddNoteClick}
+                                        className="ml-auto p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition flex items-center gap-1 text-sm active:scale-95"
                                     >
                                         <Plus className="h-4 w-4" />
                                         新建
@@ -343,21 +478,31 @@ export default function NotesPanel({
                             </>
                         ) : (
                             <form onSubmit={handleTodoSubmit} className="space-y-2">
-                                <div className="flex gap-2">
+                                <div className="flex flex-col gap-2">
                                     <input
                                         type="text"
                                         value={todoInput}
                                         onChange={(e) => setTodoInput(e.target.value)}
                                         placeholder="添加一个待办..."
-                                        className="min-w-0 flex-1 bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-white/40 focus:outline-none focus:border-white/30 transition-colors"
+                                        className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-white/40 focus:outline-none focus:border-white/30 transition-colors"
                                     />
-                                    <button
-                                        type="submit"
-                                        className="rounded-lg bg-white/10 px-3 py-2 text-white transition hover:bg-white/20"
-                                        title="添加待办"
-                                    >
-                                        <Plus className="h-4 w-4" />
-                                    </button>
+                                    <div className="flex items-center gap-1.5">
+                                        <input
+                                            type="datetime-local"
+                                            value={todoTime}
+                                            onChange={(e) => setTodoTime(e.target.value)}
+                                            title="设置待办时间 (可选)"
+                                            className="min-w-0 flex-1 bg-black/20 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white/80 focus:outline-none focus:border-white/30 transition-colors [color-scheme:dark]"
+                                        />
+                                        <button
+                                            type="submit"
+                                            className="rounded-lg bg-white/10 px-3 py-1.5 text-white transition hover:bg-white/20 active:scale-95 shrink-0 flex items-center gap-1 text-xs font-medium"
+                                            title="添加待办"
+                                        >
+                                            <Plus className="h-3.5 w-3.5" />
+                                            <span>添加</span>
+                                        </button>
+                                    </div>
                                 </div>
                                 <div className="text-xs text-white/45">
                                     {activeTodos.length} 个未完成 · {completedTodos.length} 个已完成
@@ -382,7 +527,7 @@ export default function NotesPanel({
                                         className={`w-full text-left px-4 py-3 border-b border-white/5 hover:bg-white/10 transition flex flex-col gap-1 ${note.id === activeNoteId ? 'bg-white/10' : ''}`}
                                     >
                                         <div className="flex items-center justify-between gap-2">
-                                            <span className="text-sm text-white truncate">{note.title || '未命名笔记'}</span>
+                                            <span className="text-sm text-white truncate">{note.title?.trim() || '未命名笔记'}</span>
                                             <span className="text-[10px] text-white/40 whitespace-nowrap">{formatShortTime(note.updatedAt)}</span>
                                         </div>
                                         <span className="text-xs text-white/50 truncate">
@@ -396,19 +541,33 @@ export default function NotesPanel({
                                 {todos.length === 0 ? (
                                     <div className="p-4 text-xs text-white/50">暂无待办，先添加一个任务吧。</div>
                                 ) : (
-                                    todos.map((todo) => (
-                                        <button
-                                            key={todo.id}
-                                            type="button"
-                                            onClick={() => onToggleTodo?.(todo.id)}
-                                            className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-left transition hover:bg-white/10"
-                                        >
-                                            <div className={`text-sm truncate ${todo.completed ? 'text-white/45 line-through' : 'text-white/85'}`}>
-                                                {todo.text}
-                                            </div>
-                                            <div className="mt-1 text-[10px] text-white/35">{formatShortTime(todo.createdAt)}</div>
-                                        </button>
-                                    ))
+                                    todos.map((todo) => {
+                                        const dueDateVal = todo.dueDate || todo.time;
+                                        const isOverdue = checkIsOverdue(dueDateVal, todo.completed);
+                                        return (
+                                            <button
+                                                key={todo.id}
+                                                type="button"
+                                                onClick={() => onToggleTodo?.(todo.id)}
+                                                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-left transition hover:bg-white/10"
+                                            >
+                                                <div className={`text-sm truncate ${todo.completed ? 'text-white/45 line-through' : 'text-white/85'}`}>
+                                                    {todo.text}
+                                                </div>
+                                                <div className="mt-1 flex items-center justify-between text-[10px]">
+                                                    {dueDateVal ? (
+                                                        <span className={`flex items-center gap-1 ${isOverdue ? 'text-rose-400 font-medium' : 'text-sky-300'}`}>
+                                                            <Clock className="h-3 w-3 shrink-0" />
+                                                            <span className="truncate">{formatTodoTime(dueDateVal)}</span>
+                                                            {isOverdue && <span className="text-[9px] text-rose-400 font-bold shrink-0">(超期)</span>}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-white/35">{formatShortTime(todo.createdAt)}</span>
+                                                    )}
+                                                </div>
+                                            </button>
+                                        );
+                                    })
                                 )}
                             </div>
                         )}
@@ -418,7 +577,7 @@ export default function NotesPanel({
                 {activeSection === 'notes' ? (
                     <div className="min-w-0 flex-1 flex flex-col">
                         <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 border-b border-white/10 bg-white/5">
-                            <div className="flex min-w-0 items-start gap-3">
+                            <div className="flex min-w-0 items-start gap-3 flex-1">
                                 <button
                                     type="button"
                                     onClick={() => setIsSidebarHidden(prev => !prev)}
@@ -427,10 +586,21 @@ export default function NotesPanel({
                                 >
                                     {isSidebarHidden ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
                                 </button>
-                                <div className="min-w-0">
-                                    <div className="truncate text-white font-semibold text-lg">{activeNote?.title || '未命名笔记'}</div>
+                                <div className="min-w-0 flex-1">
+                                    {activeNote ? (
+                                        <input
+                                            ref={titleInputRef}
+                                            type="text"
+                                            value={activeNote.title || ''}
+                                            onChange={(e) => onUpdateNote?.(activeNote.id, { title: e.target.value })}
+                                            placeholder="未命名笔记"
+                                            className="w-full bg-transparent text-white font-semibold text-lg placeholder-white/30 outline-none border-b border-transparent focus:border-white/30 transition-colors"
+                                        />
+                                    ) : (
+                                        <div className="truncate text-white/50 font-semibold text-lg">请选择或新建笔记</div>
+                                    )}
                                     {activeNote && (
-                                        <div className="truncate text-[11px] text-white/40">
+                                        <div className="truncate text-[11px] text-white/40 mt-0.5">
                                             更新: {formatTime(activeNote.updatedAt)} · 创建: {formatTime(activeNote.createdAt)}
                                         </div>
                                     )}
@@ -439,24 +609,34 @@ export default function NotesPanel({
                             <div className="flex shrink-0 items-center gap-2">
                                 {renderRefreshButton()}
                                 {activeNote && (
-                                    <button
-                                        onClick={() => {
-                                            if (isConfirmingDelete) {
-                                                onDeleteNote?.(activeNote.id);
-                                                setIsConfirmingDelete(false);
-                                            } else {
-                                                setIsConfirmingDelete(true);
-                                            }
-                                        }}
-                                        className={`p-2 rounded-lg transition ${
-                                            isConfirmingDelete
-                                                ? 'text-red-500 bg-red-500/10 hover:bg-red-500/20'
-                                                : 'text-white/70 hover:text-red-400 hover:bg-red-500/10'
-                                        }`}
-                                        title={isConfirmingDelete ? '确认删除' : '删除笔记'}
-                                    >
-                                        {isConfirmingDelete ? <Check className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
-                                    </button>
+                                    <>
+                                        <button
+                                            type="button"
+                                            onClick={handleCopyNoteContent}
+                                            className="p-2 rounded-lg hover:bg-white/10 text-white/70 hover:text-white transition"
+                                            title={copyState ? '已复制到剪贴板' : '复制笔记正文'}
+                                        >
+                                            {copyState ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                if (isConfirmingDelete) {
+                                                    onDeleteNote?.(activeNote.id);
+                                                    setIsConfirmingDelete(false);
+                                                } else {
+                                                    setIsConfirmingDelete(true);
+                                                }
+                                            }}
+                                            className={`p-2 rounded-lg transition ${
+                                                isConfirmingDelete
+                                                    ? 'text-red-500 bg-red-500/10 hover:bg-red-500/20'
+                                                    : 'text-white/70 hover:text-red-400 hover:bg-red-500/10'
+                                            }`}
+                                            title={isConfirmingDelete ? '确认删除' : '删除笔记'}
+                                        >
+                                            {isConfirmingDelete ? <Check className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
+                                        </button>
+                                    </>
                                 )}
                                 <button
                                     onClick={() => onOpenChange?.(false)}
@@ -481,7 +661,7 @@ export default function NotesPanel({
                                 </div>
                                 <textarea
                                     value={activeNote?.content || ''}
-                                    onChange={(e) => activeNote && onUpdateNote?.(activeNote.id, e.target.value)}
+                                    onChange={(e) => activeNote && onUpdateNote?.(activeNote.id, { content: e.target.value })}
                                     className="min-w-0 flex-1 bg-transparent text-white/90 p-4 outline-none resize-none text-sm leading-6 placeholder-white/30 font-mono sm:p-5"
                                     placeholder="开始记录你的笔记... 支持 Markdown 语法"
                                 />
@@ -538,7 +718,7 @@ export default function NotesPanel({
                         </div>
                         <div className="min-w-0 flex-1 overflow-auto p-4 sm:p-5" onWheel={(e) => e.stopPropagation()}>
                             <form onSubmit={handleTodoSubmit} className="mb-5 rounded-2xl border border-white/10 bg-white/5 p-4">
-                                <div className="flex flex-col gap-3 sm:flex-row">
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                                     <input
                                         type="text"
                                         value={todoInput}
@@ -546,13 +726,22 @@ export default function NotesPanel({
                                         placeholder="添加一个新的待办事项..."
                                         className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-4 py-2.5 text-sm text-white placeholder-white/40 outline-none transition focus:border-white/30"
                                     />
-                                    <button
-                                        type="submit"
-                                        className="flex items-center justify-center gap-2 rounded-xl bg-white/10 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-white/20 active:scale-95"
-                                    >
-                                        <Plus className="h-4 w-4" />
-                                        添加
-                                    </button>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        <input
+                                            type="datetime-local"
+                                            value={todoTime}
+                                            onChange={(e) => setTodoTime(e.target.value)}
+                                            title="设置待办时间 (可选)"
+                                            className="rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-xs text-white/80 outline-none transition focus:border-white/30 [color-scheme:dark]"
+                                        />
+                                        <button
+                                            type="submit"
+                                            className="flex items-center justify-center gap-1.5 rounded-xl bg-white/10 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-white/20 active:scale-95 shrink-0"
+                                        >
+                                            <Plus className="h-4 w-4" />
+                                            <span>添加</span>
+                                        </button>
+                                    </div>
                                 </div>
                             </form>
 
@@ -572,7 +761,7 @@ export default function NotesPanel({
                                         ) : (
                                             <div className="space-y-3">
                                                 {activeTodos.map((todo) => (
-                                                    <TodoRow key={todo.id} todo={todo} onToggleTodo={onToggleTodo} onDeleteTodo={onDeleteTodo} />
+                                                    <TodoRow key={todo.id} todo={todo} onToggleTodo={onToggleTodo} onDeleteTodo={onDeleteTodo} onUpdateTodo={onUpdateTodo} />
                                                 ))}
                                             </div>
                                         )}
@@ -586,7 +775,7 @@ export default function NotesPanel({
                                             </div>
                                             <div className="space-y-3">
                                                 {completedTodos.map((todo) => (
-                                                    <TodoRow key={todo.id} todo={todo} onToggleTodo={onToggleTodo} onDeleteTodo={onDeleteTodo} />
+                                                    <TodoRow key={todo.id} todo={todo} onToggleTodo={onToggleTodo} onDeleteTodo={onDeleteTodo} onUpdateTodo={onUpdateTodo} />
                                                 ))}
                                             </div>
                                         </section>

@@ -636,11 +636,33 @@ function App() {
     return () => clearTimeout(timer);
   }, [notes, activeNoteId]);
 
-  const handleAddTodo = (text) => {
+  const handleAddTodo = (text, dueDate = null) => {
     const now = new Date().toISOString();
-    const newTodo = { id: Date.now(), text, completed: false, createdAt: now, updatedAt: now, completedAt: null };
+    const newTodo = {
+      id: Date.now(),
+      text,
+      dueDate: dueDate || null,
+      completed: false,
+      createdAt: now,
+      updatedAt: now,
+      completedAt: null
+    };
     setTodos(prev => {
       const updated = [newTodo, ...prev];
+      currentSyncDataRef.current = { ...currentSyncDataRef.current, todos: updated };
+      localStorage.setItem('todos', JSON.stringify(updated));
+      return updated;
+    });
+    updateLocalTimestamp();
+  };
+
+  const handleUpdateTodo = (id, updates) => {
+    const now = new Date().toISOString();
+    setTodos(prev => {
+      const updated = prev.map(todo => {
+        if (todo.id !== id) return todo;
+        return { ...todo, ...updates, updatedAt: now };
+      });
       currentSyncDataRef.current = { ...currentSyncDataRef.current, todos: updated };
       localStorage.setItem('todos', JSON.stringify(updated));
       return updated;
@@ -674,7 +696,7 @@ function App() {
   };
 
   const handleAddNote = () => {
-    const newNote = { id: Date.now(), title: '未命名笔记', content: '', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    const newNote = { id: Date.now(), title: '', content: '', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     setNotes(prev => {
       const updated = [newNote, ...prev];
       currentSyncDataRef.current = { ...currentSyncDataRef.current, notes: updated };
@@ -686,12 +708,15 @@ function App() {
     updateLocalTimestamp();
   };
 
-  const handleUpdateNote = (id, content) => {
+  const handleUpdateNote = (id, updates) => {
     setNotes(prev => {
       const updated = prev.map(note => {
         if (note.id !== id) return note;
-        const firstLine = content.split('\n').find(line => line.trim() !== '') || '未命名笔记';
-        return { ...note, content, title: firstLine.slice(0, 40), updatedAt: new Date().toISOString() };
+        const now = new Date().toISOString();
+        if (typeof updates === 'string') {
+          return { ...note, content: updates, updatedAt: now };
+        }
+        return { ...note, ...updates, updatedAt: now };
       });
       currentSyncDataRef.current = { ...currentSyncDataRef.current, notes: updated };
       localStorage.setItem('notes', JSON.stringify(updated));
@@ -817,6 +842,7 @@ function App() {
           onImportNotes={handleImportNotes}
           todos={todos}
           onAddTodo={handleAddTodo}
+          onUpdateTodo={handleUpdateTodo}
           onToggleTodo={handleToggleTodo}
           onDeleteTodo={handleDeleteTodo}
           onRefreshFromCloud={isLoggedIn ? async () => {
