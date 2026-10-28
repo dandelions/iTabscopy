@@ -445,8 +445,8 @@ function renderWebDashboardHtml() {
             <form onsubmit="handleDesktopSearch(event)" class="relative flex items-center bg-black/35 backdrop-blur-md border border-glass-border rounded-2xl shadow-xl overflow-hidden hover:border-indigo-400/50 transition">
               <select id="search-engine-select" onchange="changeSearchEngine(this.value)" class="bg-black/40 text-xs sm:text-sm text-slate-200 pl-3 sm:pl-3.5 pr-1.5 py-2.5 sm:py-3 focus:outline-none cursor-pointer border-r border-glass-border [color-scheme:dark]">
                 <option value="google" class="bg-slate-900 text-white">Google</option>
-                <option value="baidu" class="bg-slate-900 text-white">百度</option>
                 <option value="bing" class="bg-slate-900 text-white">Bing</option>
+                <option value="duckduckgo" class="bg-slate-900 text-white">DuckDuckGo</option>
               </select>
               <input id="desktop-search-input" type="text" placeholder="输入搜索内容，按回车快速搜索..." class="w-full px-3.5 sm:px-4 py-2.5 sm:py-3 bg-transparent text-xs sm:text-sm text-white placeholder-slate-400 focus:outline-none" />
               <button type="submit" class="p-2.5 sm:p-3 text-slate-400 hover:text-white transition">
@@ -683,8 +683,8 @@ function renderWebDashboardHtml() {
             </div>
             <select id="setting-search-engine" onchange="onSettingSearchEngineChange(this.value)" class="bg-black/40 border border-glass-border rounded-xl px-2.5 py-1.5 text-xs text-slate-200 [color-scheme:dark]">
               <option value="google">Google</option>
-              <option value="baidu">百度</option>
               <option value="bing">Bing</option>
+              <option value="duckduckgo">DuckDuckGo</option>
             </select>
           </div>
         </div>
@@ -1259,6 +1259,9 @@ function renderWebDashboardHtml() {
 
       const selectEl = document.getElementById('search-engine-select');
       if (selectEl && gridConfig.searchEngine) {
+        if (!['google', 'bing', 'duckduckgo'].includes(gridConfig.searchEngine)) {
+          gridConfig.searchEngine = 'google';
+        }
         selectEl.value = gridConfig.searchEngine;
       }
     }
@@ -1293,7 +1296,8 @@ function renderWebDashboardHtml() {
       document.getElementById('setting-iconsize-display').innerText = (gridConfig.iconSize || 56) + 'px';
 
       document.getElementById('setting-show-search').checked = gridConfig.showSearchBar !== false;
-      document.getElementById('setting-search-engine').value = gridConfig.searchEngine || 'google';
+      const validSearchEngine = ['google', 'bing', 'duckduckgo'].includes(gridConfig.searchEngine) ? gridConfig.searchEngine : 'google';
+      document.getElementById('setting-search-engine').value = validSearchEngine;
 
       document.getElementById('setting-bg-overlay').value = bgConfig.overlay ?? 35;
       document.getElementById('setting-overlay-display').innerText = (bgConfig.overlay ?? 35) + '%';
@@ -1429,8 +1433,8 @@ function renderWebDashboardHtml() {
     // 🔍 桌面搜索处理
     const SEARCH_ENGINES = {
       google: 'https://www.google.com/search?q=',
-      baidu: 'https://www.baidu.com/s?wd=',
-      bing: 'https://cn.bing.com/search?q='
+      bing: 'https://www.bing.com/search?q=',
+      duckduckgo: 'https://duckduckgo.com/?q='
     };
 
     function handleDesktopSearch(e) {
