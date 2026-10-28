@@ -317,10 +317,13 @@ function renderWebDashboardHtml() {
     .markdown-body hr { border-color: rgba(255,255,255,0.1); margin: 1.25rem 0; }
   </style>
 </head>
-<body class="min-h-screen text-slate-100 font-sans flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
+<body class="min-h-screen text-slate-100 font-sans flex flex-col antialiased selection:bg-indigo-500 selection:text-white bg-slate-950">
 
-  <!-- 背景遮罩层 -->
-  <div id="bg-overlay" class="fixed inset-0 bg-black/60 backdrop-blur-[2px] -z-10 transition-all duration-300"></div>
+  <!-- 🖼️ 独立背景图层与遮罩层 (双层架构，确保遮罩绝对覆盖于壁纸上方) -->
+  <div id="bg-layer" class="fixed inset-0 pointer-events-none -z-10 overflow-hidden">
+    <div id="bg-image" class="absolute inset-0 bg-cover bg-center bg-no-repeat transition-all duration-700 ease-in-out"></div>
+    <div id="bg-overlay" class="absolute inset-0 transition-all duration-300"></div>
+  </div>
 
   <!-- 顶部导航栏 -->
   <header class="w-full border-b border-glass-border bg-black/20 backdrop-blur-md sticky top-0 z-30 px-4 sm:px-6 py-3 flex justify-between items-center">
@@ -691,19 +694,43 @@ function renderWebDashboardHtml() {
 
         <!-- 🖼️ 2. 壁纸与背景 -->
         <div id="set-panel-wallpaper" class="hidden space-y-4">
-          <!-- 壁纸暗度 -->
-          <div class="p-3 bg-white/5 rounded-2xl border border-white/10 space-y-2">
-            <div class="flex justify-between items-center">
+          <!-- 壁纸暗度与时区自适应 -->
+          <div class="p-3 bg-white/5 rounded-2xl border border-white/10 space-y-3">
+            <div class="flex justify-between items-start gap-2">
               <div>
-                <div class="font-medium text-slate-200">
-                  背景暗度 (Darkness)
-                  <span id="setting-overlay-base-display" class="ml-1.5 text-xs text-slate-400 font-normal">基础 30%</span>
+                <div class="font-medium text-slate-200 flex items-center gap-1.5 flex-wrap">
+                  <span>背景暗度 (Darkness)</span>
+                  <span id="setting-overlay-base-display" class="text-xs text-slate-400 font-normal">基础 30%</span>
+                  <span class="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-mono" id="setting-overlay-time-display">--:--</span>
                 </div>
-                <div class="text-[11px] text-slate-400">实际暗度随本地时间平滑变化，中午保持基础值，午夜达到 100%</div>
+                <div class="text-[11px] text-slate-400 mt-0.5">实际暗度随所选时区本地时间平滑变化，中午保持基础值，午夜达到 100%</div>
               </div>
-              <span id="setting-overlay-display" class="font-mono text-indigo-300 font-semibold text-xs sm:text-sm bg-indigo-500/20 px-2 py-0.5 rounded-lg">当前 30%</span>
+              <span id="setting-overlay-display" class="font-mono text-indigo-300 font-semibold text-xs sm:text-sm bg-indigo-500/20 px-2 py-0.5 rounded-lg shrink-0">当前 30%</span>
             </div>
             <input id="setting-bg-overlay" type="range" min="0" max="90" step="5" value="30" oninput="onSettingOverlayChange(this.value)" class="w-full accent-indigo-500 h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer" />
+
+            <!-- 🌐 时区自选 -->
+            <div class="flex items-center justify-between pt-2 border-t border-white/5 text-xs">
+              <div>
+                <div class="text-slate-300 font-medium">暗度自适应时区</div>
+                <div class="text-[10px] text-slate-400">选择计算日夜暗度的参考时区</div>
+              </div>
+              <select id="setting-bg-timezone" onchange="onSettingTimezoneChange(this.value)" class="bg-black/40 border border-glass-border rounded-lg px-2.5 py-1.5 text-xs text-slate-200 [color-scheme:dark] max-w-[190px] truncate focus:outline-none focus:border-indigo-500">
+                <option value="auto">本地自动 (跟随系统)</option>
+                <option value="Asia/Shanghai">北京时间 (UTC+8)</option>
+                <option value="Asia/Hong_Kong">香港时间 (UTC+8)</option>
+                <option value="Asia/Taipei">台北时间 (UTC+8)</option>
+                <option value="Asia/Tokyo">东京时间 (UTC+9)</option>
+                <option value="Asia/Singapore">新加坡 (UTC+8)</option>
+                <option value="UTC">世界协调时 (UTC+0)</option>
+                <option value="Europe/London">伦敦时间 (UTC+0/+1)</option>
+                <option value="Europe/Paris">巴黎时间 (UTC+1/+2)</option>
+                <option value="America/New_York">纽约时间 (UTC-5/-4)</option>
+                <option value="America/Chicago">芝加哥 (UTC-6/-5)</option>
+                <option value="America/Los_Angeles">洛杉矶 (UTC-8/-7)</option>
+                <option value="Australia/Sydney">悉尼时间 (UTC+10/+11)</option>
+              </select>
+            </div>
           </div>
 
           <!-- 背景模糊度 -->
@@ -822,9 +849,9 @@ function renderWebDashboardHtml() {
     let bgConfig = (() => {
       try {
         const saved = localStorage.getItem('bg_config');
-        return saved ? JSON.parse(saved) : { blur: 2, overlay: 30, source: 'bing', customUrl: '' };
+        return saved ? JSON.parse(saved) : { blur: 2, overlay: 30, timezone: 'auto', source: 'bing', customUrl: '' };
       } catch (e) {
-        return { blur: 2, overlay: 30, source: 'bing', customUrl: '' };
+        return { blur: 2, overlay: 30, timezone: 'auto', source: 'bing', customUrl: '' };
       }
     })();
 
@@ -1283,38 +1310,88 @@ function renderWebDashboardHtml() {
       }
     }
 
-    // ⏰ 壁纸暗度时间自适应计算（与插件逻辑一致：中午保持基础暗度，午夜达到 100%）
+    // 🖼️ 统一设置壁纸背景（优先设置在独立的 #bg-image 容器中，同时向 body 同步）
+    function setBackgroundImage(url) {
+      const bgImgEl = document.getElementById('bg-image');
+      if (bgImgEl) {
+        bgImgEl.style.backgroundImage = url ? ('url(\"' + url + '\")') : 'none';
+      }
+      if (url) {
+        document.body.style.backgroundImage = 'url(\"' + url + '\")';
+      }
+    }
+
+    // ⏰ 时区与壁纸暗度计算（支持自动/指定时区，中午保持基础暗度，午夜达到 100%）
+    function getTimeInTimezone(timezone = 'auto', date = new Date()) {
+      if (!timezone || timezone === 'auto') {
+        const hours = date.getHours() + date.getMinutes() / 60 + date.getSeconds() / 3600;
+        const timeString = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+        return { hours, timeString };
+      }
+      try {
+        const formatter = new Intl.DateTimeFormat('en-US', {
+          timeZone: timezone,
+          hour: 'numeric',
+          minute: 'numeric',
+          second: 'numeric',
+          hour12: false
+        });
+        const parts = formatter.formatToParts(date);
+        let h = 0, m = 0, s = 0;
+        for (const part of parts) {
+          if (part.type === 'hour') h = parseInt(part.value, 10);
+          if (part.type === 'minute') m = parseInt(part.value, 10);
+          if (part.type === 'second') s = parseInt(part.value, 10);
+        }
+        h = h % 24;
+        const hours = h + m / 60 + s / 3600;
+        const timeString = String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+        return { hours, timeString };
+      } catch (e) {
+        const hours = date.getHours() + date.getMinutes() / 60 + date.getSeconds() / 3600;
+        const timeString = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+        return { hours, timeString };
+      }
+    }
+
     function clamp(val, min, max) {
       return Math.min(max, Math.max(min, val));
     }
 
-    function getNightProgress(date = new Date()) {
-      const hours = date.getHours() + date.getMinutes() / 60 + date.getSeconds() / 3600;
+    function getNightProgress(timezone = 'auto', date = new Date()) {
+      const { hours } = getTimeInTimezone(timezone, date);
       const distanceFromNoon = ((hours - 12) * Math.PI) / 12;
       return (1 - Math.cos(distanceFromNoon)) / 2;
     }
 
-    function getTimeAdjustedOverlay(baseOverlay, date = new Date()) {
+    function getTimeAdjustedOverlay(baseOverlay, timezone = 'auto', date = new Date()) {
       const numericOverlay = Number(baseOverlay);
       const safeOverlay = clamp(Number.isFinite(numericOverlay) ? numericOverlay : 30, 0, 100);
-      const nightProgress = getNightProgress(date);
+      const nightProgress = getNightProgress(timezone, date);
       return Math.round(safeOverlay + (100 - safeOverlay) * nightProgress);
     }
 
     function updateOverlaySettingDisplay() {
       const baseOverlay = Number(bgConfig.overlay ?? 30);
-      const effectiveOverlay = getTimeAdjustedOverlay(baseOverlay);
+      const tz = bgConfig.timezone || 'auto';
+      const { timeString } = getTimeInTimezone(tz);
+      const effectiveOverlay = getTimeAdjustedOverlay(baseOverlay, tz);
+
       const baseEl = document.getElementById('setting-overlay-base-display');
       const curEl = document.getElementById('setting-overlay-display');
+      const timeEl = document.getElementById('setting-overlay-time-display');
+
       if (baseEl) baseEl.innerText = '基础 ' + baseOverlay + '%';
       if (curEl) curEl.innerText = '当前 ' + effectiveOverlay + '%';
+      if (timeEl) timeEl.innerText = timeString;
     }
 
     // 🖼️ 动态应用背景遮罩与壁纸设置
     function applyBgConfig() {
       const overlayEl = document.getElementById('bg-overlay');
       const baseOverlay = Number(bgConfig.overlay ?? 30);
-      const effectiveOverlay = getTimeAdjustedOverlay(baseOverlay);
+      const tz = bgConfig.timezone || 'auto';
+      const effectiveOverlay = getTimeAdjustedOverlay(baseOverlay, tz);
       const blur = Number(bgConfig.blur ?? 2);
 
       if (overlayEl) {
@@ -1324,7 +1401,7 @@ function renderWebDashboardHtml() {
       }
 
       if (bgConfig.customUrl && bgConfig.source === 'custom') {
-        document.body.style.backgroundImage = 'url(\"' + bgConfig.customUrl + '\")';
+        setBackgroundImage(bgConfig.customUrl);
       }
     }
 
@@ -1346,6 +1423,8 @@ function renderWebDashboardHtml() {
 
       const baseOverlay = Number(bgConfig.overlay ?? 30);
       document.getElementById('setting-bg-overlay').value = baseOverlay;
+      const tzSelect = document.getElementById('setting-bg-timezone');
+      if (tzSelect) tzSelect.value = bgConfig.timezone || 'auto';
       updateOverlaySettingDisplay();
 
       document.getElementById('setting-bg-blur').value = bgConfig.blur ?? 2;
@@ -1415,6 +1494,12 @@ function renderWebDashboardHtml() {
       applyBgConfig();
     }
 
+    function onSettingTimezoneChange(val) {
+      bgConfig.timezone = val || 'auto';
+      updateOverlaySettingDisplay();
+      applyBgConfig();
+    }
+
     function onSettingBlurChange(val) {
       const num = Number(val) || 0;
       document.getElementById('setting-blur-display').innerText = num + 'px';
@@ -1426,7 +1511,7 @@ function renderWebDashboardHtml() {
       bgConfig.customUrl = val.trim();
       if (bgConfig.customUrl) {
         bgConfig.source = 'custom';
-        document.body.style.backgroundImage = 'url(\"' + bgConfig.customUrl + '\")';
+        setBackgroundImage(bgConfig.customUrl);
       } else {
         bgConfig.source = 'bing';
         loadBingWallpaper();
@@ -1442,7 +1527,7 @@ function renderWebDashboardHtml() {
             bgConfig.source = 'bing';
             bgConfig.customUrl = '';
             document.getElementById('setting-custom-bg').value = '';
-            document.body.style.backgroundImage = 'url(\"' + url + '\")';
+            setBackgroundImage(url);
           }
         }
       } catch (e) {
@@ -1453,7 +1538,7 @@ function renderWebDashboardHtml() {
     function resetDefaultSettings() {
       if (!confirm('确定要恢复默认设置吗？')) return;
       gridConfig = { cols: 5, rows: 4, iconSize: 56, showSearchBar: true, searchEngine: 'google' };
-      bgConfig = { blur: 2, overlay: 30, source: 'bing', customUrl: '' };
+      bgConfig = { blur: 2, overlay: 30, timezone: 'auto', source: 'bing', customUrl: '' };
       localStorage.setItem('grid_config', JSON.stringify(gridConfig));
       localStorage.setItem('bg_config', JSON.stringify(bgConfig));
       applyGridConfig();
@@ -2011,7 +2096,7 @@ function renderWebDashboardHtml() {
         const res = await fetch('/api/bing');
         if (res.ok) {
           const { url } = await res.json();
-          if (url) document.body.style.backgroundImage = 'url(\"' + url + '\")';
+          if (url) setBackgroundImage(url);
         }
       } catch (e) {
         console.warn('壁纸加载失败，使用默认底色');
