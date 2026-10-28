@@ -353,7 +353,7 @@ function App() {
           setActiveNoteId(prevId => (
             prevId && appliedData.notes.some(n => n.id === prevId)
               ? prevId
-              : (appliedData.notes[0]?.id || null)
+              : null
           ));
           updated = true;
         }
@@ -627,10 +627,8 @@ function App() {
   useEffect(() => {
     localStorage.setItem('notes', JSON.stringify(notes));
     const timer = setTimeout(() => {
-      if (notes.length > 0 && !activeNoteId) {
-        setActiveNoteId(notes[0].id);
-      } else if (activeNoteId && !notes.some(n => n.id === activeNoteId)) {
-        setActiveNoteId(notes[0]?.id || null);
+      if (activeNoteId && !notes.some(n => n.id === activeNoteId)) {
+        setActiveNoteId(null);
       }
     }, 0);
     return () => clearTimeout(timer);
@@ -850,7 +848,12 @@ function App() {
             if (!applied) throw new Error('云端暂无可应用数据');
           } : undefined}
           isOpen={isNotesOpen}
-          onOpenChange={setIsNotesOpen}
+          onOpenChange={(open) => {
+            setIsNotesOpen(open);
+            if (!open) {
+              setActiveNoteId(null);
+            }
+          }}
         />
         <DataManagement
           isOpen={isDataManagementOpen}

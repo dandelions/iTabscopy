@@ -1781,8 +1781,8 @@ function renderWebDashboardHtml() {
 
       if (selectedNoteIndex >= 0 && selectedNoteIndex < notes.length) {
         displayNoteDetail(selectedNoteIndex);
-      } else if (window.innerWidth >= 768 && notes.length > 0) {
-        selectNote(0);
+      } else {
+        resetRightNotePanel();
       }
     }
 
@@ -1896,7 +1896,6 @@ function renderWebDashboardHtml() {
     function cancelEditNote() {
       if (isCreatingNote) {
         resetRightNotePanel();
-        if (currentSyncData?.notes?.length > 0) selectNote(0);
       } else if (selectedNoteIndex >= 0) {
         displayNoteDetail(selectedNoteIndex);
       }

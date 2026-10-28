@@ -219,6 +219,13 @@ export default function NotesPanel({
     const [todoInput, setTodoInput] = useState('');
     const [todoTime, setTodoTime] = useState('');
     const [isSidebarHidden, setIsSidebarHidden] = useState(false);
+    const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+    if (prevIsOpen !== isOpen) {
+        setPrevIsOpen(isOpen);
+        if (isOpen) {
+            setIsSidebarHidden(false);
+        }
+    }
     const [refreshState, setRefreshState] = useState('idle');
     const [copyState, setCopyState] = useState(false);
     const titleInputRef = useRef(null);
@@ -375,12 +382,6 @@ export default function NotesPanel({
             <RefreshCw className={`h-4 w-4 ${refreshState === 'loading' ? 'animate-spin' : ''}`} />
         </button>
     );
-
-    useEffect(() => {
-        if (isOpen && activeSection === 'notes' && !activeNote && notes[0]) {
-            onSelectNote?.(notes[0].id);
-        }
-    }, [isOpen, activeSection, activeNote, notes, onSelectNote]);
 
     useEffect(() => {
         const timer = setTimeout(() => setIsConfirmingDelete(false), 0);
@@ -584,7 +585,7 @@ export default function NotesPanel({
                 {activeSection === 'notes' ? (
                     <div
                         onClick={() => {
-                            if (!isSidebarHidden) {
+                            if (!isSidebarHidden && activeNote) {
                                 setIsSidebarHidden(true);
                             }
                         }}
@@ -673,42 +674,56 @@ export default function NotesPanel({
                         </div>
 
                         <div className="min-w-0 flex-1 flex overflow-hidden">
-                            <div className={`${showPreview ? 'w-1/2 min-w-0 border-r border-white/10' : 'w-full min-w-0'} flex flex-col`}>
-                                <div className="flex items-center justify-between px-5 py-2 border-b border-white/10 bg-white/5">
-                                    <span className="text-xs text-white/50">编辑</span>
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            setShowPreview(!showPreview);
-                                        }}
-                                        className="px-3 py-1 text-xs rounded-lg bg-white/10 hover:bg-white/20 text-white/70 hover:text-white transition"
-                                    >
-                                        {showPreview ? '隐藏预览' : '显示预览'}
-                                    </button>
-                                </div>
-                                <textarea
-                                    value={activeNote?.content || ''}
-                                    onChange={(e) => activeNote && onUpdateNote?.(activeNote.id, { content: e.target.value })}
-                                    className="min-w-0 flex-1 bg-transparent text-white/90 p-4 outline-none resize-none text-sm leading-6 placeholder-white/30 font-mono sm:p-5"
-                                    placeholder="开始记录你的笔记... 支持 Markdown 语法"
-                                />
-                            </div>
-
-                            {showPreview && (
-                                <div className="w-1/2 min-w-0 flex flex-col">
-                                    <div className="flex items-center justify-between px-5 py-2 border-b border-white/10 bg-white/5">
-                                        <span className="text-xs text-white/50">预览</span>
-                                        <div className="h-[27px]"></div>
-                                    </div>
-                                    <div
-                                        className="min-w-0 flex-1 overflow-auto p-4 sm:p-5"
-                                        onWheel={(e) => e.stopPropagation()}
-                                    >
-                                        <div
-                                            className="markdown-preview text-sm leading-6"
-                                            dangerouslySetInnerHTML={{ __html: renderedContent }}
+                            {activeNote ? (
+                                <>
+                                    <div className={`${showPreview ? 'w-1/2 min-w-0 border-r border-white/10' : 'w-full min-w-0'} flex flex-col`}>
+                                        <div className="flex items-center justify-between px-5 py-2 border-b border-white/10 bg-white/5">
+                                            <span className="text-xs text-white/50">编辑</span>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setShowPreview(!showPreview);
+                                                }}
+                                                className="px-3 py-1 text-xs rounded-lg bg-white/10 hover:bg-white/20 text-white/70 hover:text-white transition"
+                                            >
+                                                {showPreview ? '隐藏预览' : '显示预览'}
+                                            </button>
+                                        </div>
+                                        <textarea
+                                            value={activeNote.content || ''}
+                                            onChange={(e) => onUpdateNote?.(activeNote.id, { content: e.target.value })}
+                                            className="min-w-0 flex-1 bg-transparent text-white/90 p-4 outline-none resize-none text-sm leading-6 placeholder-white/30 font-mono sm:p-5"
+                                            placeholder="开始记录你的笔记... 支持 Markdown 语法"
                                         />
                                     </div>
+
+                                    {showPreview && (
+                                        <div className="w-1/2 min-w-0 flex flex-col">
+                                            <div className="flex items-center justify-between px-5 py-2 border-b border-white/10 bg-white/5">
+                                                <span className="text-xs text-white/50">预览</span>
+                                                <div className="h-[27px]"></div>
+                                            </div>
+                                            <div
+                                                className="min-w-0 flex-1 overflow-auto p-4 sm:p-5"
+                                                onWheel={(e) => e.stopPropagation()}
+                                            >
+                                                <div
+                                                    className="markdown-preview text-sm leading-6"
+                                                    dangerouslySetInnerHTML={{ __html: renderedContent }}
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
+                            ) : (
+                                <div className="min-w-0 flex-1 flex flex-col items-center justify-center p-6 text-center text-white/40 select-none">
+                                    <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-3 text-white/30">
+                                        <StickyNote className="h-6 w-6" />
+                                    </div>
+                                    <p className="text-sm font-medium text-white/70">未选择笔记</p>
+                                    <p className="text-xs text-white/40 mt-1 max-w-xs leading-relaxed">
+                                        请从左侧列表点击查看笔记，或点击“新建”创建一篇新笔记
+                                    </p>
                                 </div>
                             )}
                         </div>
