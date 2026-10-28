@@ -238,6 +238,29 @@ function renderWebDashboardHtml() {
     .custom-scrollbar::-webkit-scrollbar-thumb:hover {
       background: rgba(255, 255, 255, 0.5);
     }
+    /* 界面 UI 骨架默认不被划词与全选命令波及，避免全选时选中整个页面 */
+    header,
+    nav,
+    footer,
+    button,
+    #dashboard-section > div:first-child,
+    #notes-list-panel,
+    #notes-detail-panel > div:first-child,
+    #view-shortcuts,
+    #view-todos {
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    #right-note-body,
+    #right-note-body *,
+    .markdown-body,
+    .markdown-body *,
+    input,
+    textarea,
+    [contenteditable="true"] {
+      -webkit-user-select: text !important;
+      user-select: text !important;
+    }
     #notes-detail-panel:not(.hidden) {
       display: flex !important;
       flex-direction: column !important;
@@ -484,6 +507,10 @@ function renderWebDashboardHtml() {
                   </div>
 
                   <div id="note-action-btns" class="flex items-center gap-1.5 shrink-0">
+                    <button id="btn-copy-note" onclick="copyCurrentNoteContent()" title="复制笔记正文到剪贴板" class="hidden px-2.5 sm:px-3 py-1.5 text-xs bg-white/10 hover:bg-white/20 text-slate-200 rounded-lg border border-glass-border transition flex items-center gap-1 active:scale-95 cursor-pointer">
+                      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
+                      <span id="btn-copy-note-text">复制</span>
+                    </button>
                     <button id="btn-edit-note" onclick="startEditNote()" class="hidden px-3 py-1.5 text-xs bg-white/10 hover:bg-white/20 text-slate-200 rounded-lg border border-glass-border transition flex items-center gap-1">
                       <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                       <span>编辑</span>
@@ -587,6 +614,46 @@ function renderWebDashboardHtml() {
 
       window.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') closeFolderModal();
+
+        // 优化全选操作：在笔记区域按全选快捷键时，仅选择笔记正文内容
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) {
+          const activeEl = document.activeElement;
+          const tagName = activeEl ? activeEl.tagName.toLowerCase() : '';
+          if (tagName === 'input' || tagName === 'textarea' || activeEl?.isContentEditable) {
+            return;
+          }
+
+          const notesView = document.getElementById('view-notes');
+          const isNotesView = notesView && !notesView.classList.contains('hidden');
+          const rightBody = document.getElementById('right-note-body');
+          const rightEditor = document.getElementById('right-note-editor');
+
+          const sel = window.getSelection();
+          let isSelectionInNote = false;
+          if (sel && sel.anchorNode) {
+            const detailPanel = document.getElementById('notes-detail-panel');
+            if (detailPanel && detailPanel.contains(sel.anchorNode)) {
+              isSelectionInNote = true;
+            }
+          }
+
+          if (isSelectionInNote || (isNotesView && currentTab === 'notes')) {
+            if (rightEditor && !rightEditor.classList.contains('hidden')) {
+              const contentArea = document.getElementById('editor-content');
+              if (contentArea) {
+                e.preventDefault();
+                contentArea.focus();
+                contentArea.select();
+              }
+              return;
+            }
+
+            if (rightBody && !rightBody.classList.contains('hidden') && selectedNoteIndex >= 0) {
+              e.preventDefault();
+              selectNoteContent();
+            }
+          }
+        }
       });
 
       if (!token) {
@@ -1146,6 +1213,7 @@ function renderWebDashboardHtml() {
       editorEl.classList.add('hidden');
       bodyEl.scrollTop = 0;
 
+      document.getElementById('btn-copy-note').classList.remove('hidden');
       document.getElementById('btn-edit-note').classList.remove('hidden');
       document.getElementById('btn-delete-note').classList.remove('hidden');
 
@@ -1172,6 +1240,7 @@ function renderWebDashboardHtml() {
 
       document.getElementById('right-note-title').innerText = '新建笔记';
       document.getElementById('right-note-time').innerText = '正在编写新内容...';
+      document.getElementById('btn-copy-note').classList.add('hidden');
       document.getElementById('btn-edit-note').classList.add('hidden');
       document.getElementById('btn-delete-note').classList.add('hidden');
 
@@ -1196,6 +1265,7 @@ function renderWebDashboardHtml() {
       if (!note) return;
 
       isCreatingNote = false;
+      document.getElementById('btn-copy-note').classList.add('hidden');
       document.getElementById('btn-edit-note').classList.add('hidden');
       document.getElementById('btn-delete-note').classList.add('hidden');
 
@@ -1263,6 +1333,7 @@ function renderWebDashboardHtml() {
     function resetRightNotePanel() {
       document.getElementById('right-note-title').innerText = '请选择笔记';
       document.getElementById('right-note-time').innerText = '';
+      document.getElementById('btn-copy-note').classList.add('hidden');
       document.getElementById('btn-edit-note').classList.add('hidden');
       document.getElementById('btn-delete-note').classList.add('hidden');
       document.getElementById('right-note-editor').classList.add('hidden');
@@ -1272,6 +1343,44 @@ function renderWebDashboardHtml() {
         '<svg class="w-7 h-7 sm:w-8 sm:h-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">' +
         '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />' +
         '</svg><span>👈 点击左侧任意笔记查看或点击“新建笔记”</span></div>';
+    }
+
+    // 📋 精确全选笔记正文内容，避免全选波及全页面
+    function selectNoteContent() {
+      const bodyEl = document.getElementById('right-note-body');
+      if (!bodyEl || bodyEl.classList.contains('hidden')) return false;
+      const contentEl = bodyEl.querySelector('.markdown-body') || bodyEl;
+      if (!contentEl) return false;
+      const sel = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(contentEl);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      return true;
+    }
+
+    // 📋 一键复制当前笔记完整纯文本内容到剪贴板
+    async function copyCurrentNoteContent() {
+      const notes = currentSyncData?.notes || [];
+      const note = notes[selectedNoteIndex];
+      if (!note) return;
+      const content = note.content || '';
+      const btnText = document.getElementById('btn-copy-note-text');
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(content);
+        } else {
+          selectNoteContent();
+          document.execCommand('copy');
+        }
+        if (btnText) {
+          const orig = btnText.innerText;
+          btnText.innerText = '已复制!';
+          setTimeout(() => { btnText.innerText = orig; }, 1500);
+        }
+      } catch (e) {
+        selectNoteContent();
+      }
     }
 
     function mobileBackToList() {
