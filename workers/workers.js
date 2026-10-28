@@ -360,7 +360,7 @@ function renderWebDashboardHtml() {
   </header>
 
   <!-- 主体区域 -->
-  <main class="flex-1 max-w-6xl w-full mx-auto p-3 sm:p-5 lg:p-6 flex flex-col min-h-0">
+  <main class="flex-1 max-w-6xl w-full mx-auto px-2 py-3 sm:p-5 lg:p-6 flex flex-col min-h-0">
 
     <!-- 1. 未登录卡片 -->
     <div id="login-section" class="flex-1 flex items-center justify-center py-10">
@@ -458,8 +458,8 @@ function renderWebDashboardHtml() {
           </div>
 
           <div class="w-full">
-            <!-- ⚡ PC 端每行展示不超过 5 个 (最大 5 列，居中优雅展示) -->
-            <div id="shortcuts-container" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3.5 sm:gap-6 max-w-4xl mx-auto py-2">
+            <!-- ⚡ 桌面图标容器 (移动端支持4列并收窄间距，PC 端不超过 5 列) -->
+            <div id="shortcuts-container" class="grid grid-cols-4 sm:grid-cols-4 md:grid-cols-5 gap-x-1.5 gap-y-3 sm:gap-4 md:gap-6 max-w-4xl mx-auto py-2">
               <!-- 动态加载桌面图标和文件夹 -->
             </div>
             <div id="shortcuts-empty" class="hidden py-16 text-center text-slate-400 text-xs sm:text-sm">
@@ -846,7 +846,12 @@ function renderWebDashboardHtml() {
     async function init() {
       applyBgConfig();
       applyGridConfig();
-      window.addEventListener('resize', applyGridConfig);
+      window.addEventListener('resize', () => {
+        applyGridConfig();
+        if (currentSyncData && currentSyncData.shortcuts) {
+          renderShortcuts(currentSyncData.shortcuts);
+        }
+      });
       loadBingWallpaper();
       const token = localStorage.getItem('itabs_token') || localStorage.getItem('sync_token');
       const email = localStorage.getItem('itabs_email') || localStorage.getItem('sync_email');
@@ -1167,7 +1172,11 @@ function renderWebDashboardHtml() {
       }
       emptyEl.classList.add('hidden');
 
-      const iconSize = Math.min(80, Math.max(44, Number(gridConfig.iconSize) || 56));
+      const baseIconSize = Math.min(80, Math.max(44, Number(gridConfig.iconSize) || 56));
+      const isMobile = window.innerWidth < 640;
+      const iconSize = isMobile
+        ? Math.min(baseIconSize, window.innerWidth < 380 ? 46 : 50)
+        : baseIconSize;
 
       container.innerHTML = shortcuts.map((s, idx) => {
         const isFolder = s.type === 'folder';
@@ -1180,16 +1189,16 @@ function renderWebDashboardHtml() {
 
           return \`
             <div onclick="openFolderModal('\${s.id || idx}')"
-                 class="group flex flex-col items-center justify-center p-1 cursor-pointer select-none">
+                 class="group flex flex-col items-center justify-center p-0.5 sm:p-1 cursor-pointer select-none">
               <div style="width: \${iconSize}px; height: \${iconSize}px;"
-                   class="rounded-xl sm:rounded-2xl mb-1.5 p-1 sm:p-1.5 bg-white/15 hover:bg-white/25 backdrop-blur-md border border-white/20 shadow-md shadow-black/30 grid \${gridCols} gap-0.5 sm:gap-1 items-center justify-center overflow-hidden group-hover:scale-108 transition-all duration-200">
+                   class="rounded-xl sm:rounded-2xl mb-1 sm:mb-1.5 p-1 sm:p-1.5 bg-white/15 hover:bg-white/25 backdrop-blur-md border border-white/20 shadow-md shadow-black/30 grid \${gridCols} gap-0.5 sm:gap-1 items-center justify-center overflow-hidden group-hover:scale-108 transition-all duration-200">
                 \${previewIcons.map(child => {
                   const fallback = generateLetterAvatar(child.title || child.name || 'W', 32);
                   return \`<img src="\${getShortcutIcon(child)}" class="w-full h-full object-contain rounded-[2px] sm:rounded-xs" onerror="this.onerror=null;this.src='\${fallback}'" />\`;
                 }).join('')}
                 \${previewIcons.length === 0 ? '<div class="w-full h-full flex items-center justify-center col-span-3 text-[9px] text-slate-400">空</div>' : ''}
               </div>
-              <span class="text-[11px] sm:text-xs font-medium text-slate-200 group-hover:text-white truncate w-full text-center tracking-tight leading-tight">
+              <span class="text-[10px] sm:text-xs font-medium text-slate-200 group-hover:text-white truncate w-full text-center tracking-tight leading-tight">
                 \${title}
               </span>
             </div>
@@ -1202,12 +1211,12 @@ function renderWebDashboardHtml() {
 
         return \`
           <a href="\${url}" target="_blank" rel="noopener noreferrer"
-             class="group flex flex-col items-center justify-center p-1 cursor-pointer select-none">
+             class="group flex flex-col items-center justify-center p-0.5 sm:p-1 cursor-pointer select-none">
             <div style="width: \${iconSize}px; height: \${iconSize}px;"
-                 class="rounded-xl sm:rounded-2xl mb-1.5 flex items-center justify-center overflow-hidden p-1.5 sm:p-2 bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/15 shadow-md shadow-black/30 group-hover:scale-108 transition-all duration-200">
+                 class="rounded-xl sm:rounded-2xl mb-1 sm:mb-1.5 flex items-center justify-center overflow-hidden p-1.5 sm:p-2 bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/15 shadow-md shadow-black/30 group-hover:scale-108 transition-all duration-200">
               <img src="\${iconSrc}" alt="\${title}" class="w-full h-full object-contain rounded-md sm:rounded-lg" onerror="this.onerror=null;this.src='\${fallbackIcon}'" />
             </div>
-            <span class="text-[11px] sm:text-xs font-medium text-slate-200 group-hover:text-white truncate w-full text-center tracking-tight leading-tight">
+            <span class="text-[10px] sm:text-xs font-medium text-slate-200 group-hover:text-white truncate w-full text-center tracking-tight leading-tight">
               \${title}
             </span>
           </a>
@@ -1215,7 +1224,7 @@ function renderWebDashboardHtml() {
       }).join('');
     }
 
-    // 🖥️ 动态应用网格与布局设置 (严格控制 PC 端列数不超过 5)
+    // 🖥️ 动态应用网格与布局设置 (严格控制 PC 端列数不超过 5，移动端支持 4 列紧凑排布)
     function applyGridConfig() {
       const container = document.getElementById('shortcuts-container');
       if (!container) return;
@@ -1224,10 +1233,18 @@ function renderWebDashboardHtml() {
 
       if (window.innerWidth >= 768) {
         container.style.gridTemplateColumns = 'repeat(' + cols + ', minmax(0, 1fr))';
+        container.style.columnGap = '24px';
+        container.style.rowGap = '24px';
       } else if (window.innerWidth >= 640) {
         container.style.gridTemplateColumns = 'repeat(' + Math.min(cols, 4) + ', minmax(0, 1fr))';
+        container.style.columnGap = '16px';
+        container.style.rowGap = '16px';
       } else {
-        container.style.gridTemplateColumns = 'repeat(' + Math.min(cols, 3) + ', minmax(0, 1fr))';
+        // 📱 手机端适配：默认展示 4 列，间距收窄至 6px/12px
+        const mobileCols = Math.min(cols, 4);
+        container.style.gridTemplateColumns = 'repeat(' + mobileCols + ', minmax(0, 1fr))';
+        container.style.columnGap = '6px';
+        container.style.rowGap = '12px';
       }
 
       // 搜索栏显示与隐藏
