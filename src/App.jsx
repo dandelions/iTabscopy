@@ -28,6 +28,10 @@ const LAST_CLOUD_UPDATE_KEY = 'last_cloud_update';
 const LAST_SYNCED_SNAPSHOT_KEY = 'last_synced_snapshot';
 const SYNC_PUSH_DEBOUNCE_MS = 700;
 const SYNC_POLL_INTERVAL_MS = 5000;
+// 主动触发（可见性/焦点变化、轮询）的最小间隔。浏览器重建界面时会连续派发
+// visibilitychange/focus，若每次都发起云端拉取，页面要等网络往返和整树重渲染，
+// 表现为“旧配色停一会儿再突然切换”。
+const SYNC_PASSIVE_PULL_MIN_INTERVAL_MS = 15000;
 
 const readStoredTimestamp = (key) => {
   const raw = localStorage.getItem(key);
@@ -127,6 +131,7 @@ function App() {
   const lastPushedSnapshotRef = useRef('');
   const currentSyncDataRef = useRef({ shortcuts, gridConfig, bgConfig, bgUrl, todos, notes });
   const hasCompletedInitialPullRef = useRef(!syncService.isLoggedIn());
+  const lastPassivePullAtRef = useRef(0);
 
   useEffect(() => {
     currentSyncDataRef.current = { shortcuts, gridConfig, bgConfig, bgUrl, todos, notes };
@@ -424,7 +429,11 @@ function App() {
     if (!isLoggedIn || !isOnline) return undefined;
 
     const pullWhenActive = () => {
-      if (document.visibilityState !== 'hidden') pullFromCloud();
+      if (document.visibilityState === 'hidden') return;
+      const now = Date.now();
+      if (now - lastPassivePullAtRef.current < SYNC_PASSIVE_PULL_MIN_INTERVAL_MS) return;
+      lastPassivePullAtRef.current = now;
+      pullFromCloud();
     };
 
     const interval = setInterval(pullWhenActive, SYNC_POLL_INTERVAL_MS);
