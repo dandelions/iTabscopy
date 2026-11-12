@@ -60,15 +60,19 @@ const Layout = ({ children, backgroundUrl, bgConfig }) => {
                 style={{
                     backgroundImage: displayedBg ? `url(${displayedBg})` : 'none',
                     backgroundColor: !displayedBg ? '#111827' : 'transparent',
-                    opacity: isBackgroundVisible ? 1 : 0
+                    opacity: isBackgroundVisible ? 1 : 0,
+                    // 模糊直接作用在壁纸图层上：只需栅格化一次。
+                    // 之前用全屏 backdrop-filter，合成器每帧都要重新过滤下层内容，
+                    // 在无 GPU 加速的设备上重新创建图层（例如切换深浅色重建界面）
+                    // 会卡住数秒。放大一点是为了盖住模糊产生的透明边缘。
+                    filter: displayedBg && blur > 0 ? `blur(${blur}px)` : 'none',
+                    transform: displayedBg && blur > 0 ? 'scale(1.06)' : 'none'
                 }}
             >
                 <div
                     className="absolute inset-0 transition-all duration-300"
                     style={{
-                        backgroundColor: `rgba(0, 0, 0, ${effectiveOverlay / 100})`,
-                        backdropFilter: `blur(${blur}px)`,
-                        WebkitBackdropFilter: `blur(${blur}px)`
+                        backgroundColor: `rgba(0, 0, 0, ${effectiveOverlay / 100})`
                     }}
                 />
             </div>
