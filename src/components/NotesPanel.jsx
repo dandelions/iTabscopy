@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Plus, Trash2, Check, Download, Upload, Search, StickyNote, ClipboardList, Circle, CheckCircle2, PanelLeftClose, PanelLeftOpen, RefreshCw, Copy, Clock, Calendar, Save, CloudUpload } from 'lucide-react';
 import { marked } from 'marked';
+import { getVisibleNotes } from '../utils/noteMerge';
 
 const formatTime = (iso) => {
     if (!iso) return '';
@@ -231,19 +232,24 @@ export default function NotesPanel({
     const [copyState, setCopyState] = useState(false);
     const [saveState, setSaveState] = useState('idle');
     const titleInputRef = useRef(null);
-    const activeNote = useMemo(() => notes.find(n => n.id === activeNoteId) || null, [notes, activeNoteId]);
+    // 墓碑只参与同步，不进入界面
+    const visibleNotes = useMemo(() => getVisibleNotes(notes), [notes]);
+    const activeNote = useMemo(
+        () => visibleNotes.find(n => String(n.id) === String(activeNoteId)) || null,
+        [visibleNotes, activeNoteId]
+    );
     const activeNoteContent = activeNote?.content || '';
     const activeTodos = useMemo(() => todos.filter(todo => !todo.completed), [todos]);
     const completedTodos = useMemo(() => todos.filter(todo => todo.completed), [todos]);
 
     const filteredNotes = useMemo(() => {
-        if (!searchQuery.trim()) return notes;
+        if (!searchQuery.trim()) return visibleNotes;
         const query = searchQuery.toLowerCase();
-        return notes.filter(note =>
+        return visibleNotes.filter(note =>
             (note.title || '').toLowerCase().includes(query) ||
             (note.content || '').toLowerCase().includes(query)
         );
-    }, [notes, searchQuery]);
+    }, [visibleNotes, searchQuery]);
 
     marked.setOptions({
         breaks: true,
@@ -534,7 +540,7 @@ export default function NotesPanel({
                     <div className="overflow-y-auto max-h-[calc(100%-60px)]" onWheel={(e) => e.stopPropagation()}>
                         {activeSection === 'notes' ? (
                             <>
-                                {notes.length === 0 && (
+                                {visibleNotes.length === 0 && (
                                     <div className="p-4 text-xs text-white/50">暂无笔记，点击“新建”开始。</div>
                                 )}
                                 {searchQuery && filteredNotes.length === 0 && (

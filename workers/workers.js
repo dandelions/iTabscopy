@@ -1114,11 +1114,12 @@ function renderWebDashboardHtml() {
     }
 
     function getSelectedNoteId() {
-      const notes = currentSyncData?.notes || [];
+      const notes = getVisibleNotes();
       return notes[selectedNoteIndex]?.id || null;
     }
 
-    // 🧩 统一应用云端快照：按笔记 id 恢复选中，避免另一端删除后索引错位
+    // 🧩 统一应用云端快照：按笔记 id 合并（每条笔记带 updatedAt，删除以墓碑参与比较），
+    // 合并结果与云端不一致时回推，保证一次同步即收敛
     function applyCloudSnapshot(data) {
       // 跨数据中心读到的是旧副本时不能回退界面，否则刚拉到的删除结果会被旧快照覆盖
       const incomingUpdatedAt = Number(data?.updatedAt) || 0;
@@ -1127,7 +1128,12 @@ function renderWebDashboardHtml() {
       }
 
       const prevSelectedNoteId = getSelectedNoteId();
-      currentSyncData = data || { shortcuts: [], todos: [], notes: [] };
+      const cloudNotes = Array.isArray(data?.notes) ? data.notes : [];
+      const localNotes = Array.isArray(currentSyncData?.notes) ? currentSyncData.notes : [];
+      const normalizedCloudNotes = mergeNoteLists(cloudNotes, []);
+      const mergedNotes = mergeNoteLists(cloudNotes, localNotes);
+
+      currentSyncData = { ...(data || { shortcuts: [], todos: [], notes: [] }), notes: mergedNotes };
 
       if (currentSyncData.gridConfig && typeof currentSyncData.gridConfig === 'object') {
         gridConfig = { ...gridConfig, ...currentSyncData.gridConfig };
@@ -1141,12 +1147,21 @@ function renderWebDashboardHtml() {
       applyGridConfig();
       applyBgConfig();
 
-      const notes = Array.isArray(currentSyncData.notes) ? currentSyncData.notes : [];
-      selectedNoteIndex = prevSelectedNoteId ? notes.findIndex((n) => n.id === prevSelectedNoteId) : -1;
+      const visibleNotes = mergedNotes.filter((n) => !n.deleted);
+      selectedNoteIndex = prevSelectedNoteId
+        ? visibleNotes.findIndex((n) => n.id === prevSelectedNoteId)
+        : -1;
       isCreatingNote = false;
 
       renderDashboard(currentSyncData);
       lastAppliedCloudUpdatedAt = Number(currentSyncData.updatedAt) || Date.now();
+      localStorage.setItem('itabs_sync_cursor', String(lastAppliedCloudUpdatedAt));
+
+      // 本地有云端缺失的改动（例如刚新建的笔记）时把合并结果推回去，单轮收敛
+      const hasLocalOnlyChange = JSON.stringify(mergedNotes) !== JSON.stringify(normalizedCloudNotes);
+      if (hasLocalOnlyChange) {
+        setTimeout(() => { saveToCloud(); }, 0);
+      }
       return true;
     }
 
@@ -1280,6 +1295,8 @@ function renderWebDashboardHtml() {
 
       currentSyncData.gridConfig = gridConfig;
       currentSyncData.bgConfig = bgConfig;
+      // 上传前清理超期墓碑，避免 notes 无限增长
+      currentSyncData.notes = pruneExpiredTombstones(mergeNoteLists(currentSyncData.notes || [], []));
       const baseUpdatedAt = currentSyncData.updatedAt || 0;
       const newUpdatedAt = Date.now();
       const payload = {
@@ -1330,11 +1347,10 @@ function renderWebDashboardHtml() {
     function renderDashboard(data) {
       const shortcuts = Array.isArray(data.shortcuts) ? data.shortcuts : [];
       const todos = Array.isArray(data.todos) ? data.todos : [];
-      const notes = Array.isArray(data.notes) ? data.notes : [];
 
       renderShortcuts(shortcuts);
       renderTodos(todos);
-      renderNotesList(notes);
+      renderNotesList();
     }
 
     // =========================================================================
@@ -1778,7 +1794,7 @@ function renderWebDashboardHtml() {
       const data = {
         shortcuts: currentSyncData?.shortcuts || [],
         todos: currentSyncData?.todos || [],
-        notes: currentSyncData?.notes || [],
+        notes: getVisibleNotes(),
         gridConfig: gridConfig,
         bgConfig: bgConfig,
         exportedAt: Date.now(),
@@ -2016,7 +2032,57 @@ function renderWebDashboardHtml() {
       }
     }
 
-    function renderNotesList(notes) {
+    // ===== 笔记条目规范化与按 id 合并（含删除墓碑） =====
+    // 每条笔记都带 updatedAt；删除不再直接移除，而是留下 deleted 墓碑并更新时间，
+    // 这样两端同步时可以直接比较时间，区分「这条是被删除了」还是「这条被更新了」。
+    const NOTE_TOMBSTONE_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+
+    function normalizeNoteEntry(note) {
+      if (!note || typeof note !== 'object') return null;
+      const id = note.id === undefined || note.id === null ? '' : String(note.id);
+      if (!id) return null;
+      const created = Number(note.createdAt) || 0;
+      const updated = Number(note.updatedAt) || created || 0;
+      return {
+        ...note,
+        id,
+        createdAt: created || updated,
+        updatedAt: updated,
+      };
+    }
+
+    // 同一 id 取 updatedAt 较新的那份（删除以墓碑形式参与比较，读取阶段不做清理，
+    // 否则本地回推会抹掉云端墓碑，另一端就再也看不到这次删除）
+    function mergeNoteLists(primaryNotes, secondaryNotes) {
+      const byId = new Map();
+      const put = (raw) => {
+        const note = normalizeNoteEntry(raw);
+        if (!note) return;
+        const existing = byId.get(note.id);
+        if (!existing || note.updatedAt >= existing.updatedAt) byId.set(note.id, note);
+      };
+      (secondaryNotes || []).forEach(put);
+      (primaryNotes || []).forEach(put);
+      return Array.from(byId.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+    }
+
+    // 仅在上传前清理超过保留期的墓碑，避免 notes 无限增长
+    function pruneExpiredTombstones(notes) {
+      const now = Date.now();
+      return (notes || []).filter((note) => !note?.deleted || (Number(note.updatedAt) || 0) > now - NOTE_TOMBSTONE_TTL_MS);
+    }
+
+    function getVisibleNotes() {
+      return mergeNoteLists(currentSyncData?.notes || [], []).filter((note) => !note.deleted);
+    }
+
+    function findNoteById(id) {
+      if (!id) return null;
+      return (currentSyncData?.notes || []).find((note) => String(note.id) === String(id)) || null;
+    }
+
+    function renderNotesList() {
+      const notes = getVisibleNotes();
       const container = document.getElementById('notes-list-container');
       const emptyEl = document.getElementById('notes-empty');
       document.getElementById('notes-count').innerText = notes.length;
@@ -2059,7 +2125,7 @@ function renderWebDashboardHtml() {
     }
 
     function selectNote(idx) {
-      const notes = currentSyncData?.notes || [];
+      const notes = getVisibleNotes();
       if (!notes[idx]) return;
       selectedNoteIndex = idx;
       isCreatingNote = false;
@@ -2086,7 +2152,7 @@ function renderWebDashboardHtml() {
     }
 
     function displayNoteDetail(idx) {
-      const notes = currentSyncData?.notes || [];
+      const notes = getVisibleNotes();
       const note = notes[idx];
       if (!note) return;
 
@@ -2178,8 +2244,7 @@ function renderWebDashboardHtml() {
     }
 
     function startEditNote() {
-      const notes = currentSyncData?.notes || [];
-      const note = notes[selectedNoteIndex];
+      const note = getVisibleNotes()[selectedNoteIndex];
       if (!note) return;
 
       isCreatingNote = false;
@@ -2224,29 +2289,53 @@ function renderWebDashboardHtml() {
           updatedAt: now
         };
         currentSyncData.notes.unshift(newNote);
-        selectedNoteIndex = 0;
         isCreatingNote = false;
-      } else if (selectedNoteIndex >= 0 && currentSyncData.notes[selectedNoteIndex]) {
-        currentSyncData.notes[selectedNoteIndex].title = title;
-        currentSyncData.notes[selectedNoteIndex].content = content;
-        currentSyncData.notes[selectedNoteIndex].updatedAt = now;
+        currentSyncData.notes = mergeNoteLists(currentSyncData.notes, []);
+        selectedNoteIndex = getVisibleNotes().findIndex((n) => n.id === newNote.id);
+      } else {
+        const editingNote = getVisibleNotes()[selectedNoteIndex];
+        if (editingNote) {
+          // 按 id 定位真实条目，避免列表含墓碑后索引错位
+          const target = findNoteById(editingNote.id);
+          if (target) {
+            target.title = title;
+            target.content = content;
+            target.updatedAt = now;
+          }
+          currentSyncData.notes = mergeNoteLists(currentSyncData.notes, []);
+          selectedNoteIndex = getVisibleNotes().findIndex((n) => n.id === editingNote.id);
+        }
       }
 
-      renderNotesList(currentSyncData.notes);
+      renderNotesList();
       displayNoteDetail(selectedNoteIndex);
       clearNoteDraft();
       saveToCloud();
     }
 
     function deleteCurrentNote() {
-      if (selectedNoteIndex < 0 || !currentSyncData?.notes?.[selectedNoteIndex]) return;
-      const noteTitle = currentSyncData.notes[selectedNoteIndex].title || '此笔记';
+      const note = getVisibleNotes()[selectedNoteIndex];
+      if (!note) return;
+      const noteTitle = note.title || '此笔记';
       if (!confirm('确定要删除 "' + noteTitle + '" 吗？')) return;
 
-      currentSyncData.notes.splice(selectedNoteIndex, 1);
+      const now = Date.now();
+      // 不直接抹掉条目：留下墓碑并更新时间，另一端据此判定「这是删除」而不是「还没同步过来」
+      currentSyncData.notes = (currentSyncData.notes || []).map((item) => {
+        if (String(item?.id) !== String(note.id)) return item;
+        return {
+          id: item.id,
+          title: item.title || '',
+          content: '',
+          createdAt: item.createdAt || now,
+          updatedAt: now,
+          deleted: true,
+        };
+      });
+      currentSyncData.notes = mergeNoteLists(currentSyncData.notes, []);
       selectedNoteIndex = -1;
 
-      renderNotesList(currentSyncData.notes);
+      renderNotesList();
       resetRightNotePanel();
       saveToCloud();
 
@@ -2284,8 +2373,7 @@ function renderWebDashboardHtml() {
 
     // 📋 一键复制当前笔记完整纯文本内容到剪贴板
     async function copyCurrentNoteContent() {
-      const notes = currentSyncData?.notes || [];
-      const note = notes[selectedNoteIndex];
+      const note = getVisibleNotes()[selectedNoteIndex];
       if (!note) return;
       const content = note.content || '';
       const btnText = document.getElementById('btn-copy-note-text');

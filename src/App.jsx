@@ -19,6 +19,7 @@ if (import.meta.env.DEV) {
 
 import { fetchRandomPhoto, cacheImage } from './utils/unsplash';
 import { removeIconFromCache } from './utils/icons';
+import { mergeNoteLists, pruneExpiredTombstones, getVisibleNotes, buildNoteTombstone } from './utils/noteMerge';
 import syncService from './services/syncService';
 
 const DEFAULT_BG_URL = 'https://images.unsplash.com/photo-1472214103451-9374bd1c798e?q=80&w=2070&auto=format&fit=crop';
@@ -132,6 +133,7 @@ function App() {
   const currentSyncDataRef = useRef({ shortcuts, gridConfig, bgConfig, bgUrl, todos, notes });
   const hasCompletedInitialPullRef = useRef(!syncService.isLoggedIn());
   const lastPassivePullAtRef = useRef(0);
+  const pullFromCloudRef = useRef(null);
 
   useEffect(() => {
     currentSyncDataRef.current = { shortcuts, gridConfig, bgConfig, bgUrl, todos, notes };
@@ -206,7 +208,8 @@ function App() {
 
   const createBackupData = useCallback(() => syncService.createBackupData({
     todos,
-    notes,
+    // 备份/导出只包含可见笔记，墓碑仅用于同步
+    notes: getVisibleNotes(notes),
     shortcuts,
     gridConfig,
     bgConfig,
@@ -231,7 +234,12 @@ function App() {
 
   const pushLocalToCloud = useCallback(async (dataOverride = null, options = {}) => {
     if (!syncService.isLoggedIn()) throw new Error('Not logged in');
-    const data = dataOverride || currentSyncDataRef.current;
+    const rawData = dataOverride || currentSyncDataRef.current;
+    // 推送前规范化笔记：合并去重并清理超期墓碑，避免无限增长
+    const data = {
+      ...rawData,
+      notes: pruneExpiredTombstones(mergeNoteLists(rawData?.notes || [], [])),
+    };
     const force = options.force !== false;
     const baseUpdatedAt = options.baseUpdatedAt;
 
@@ -255,14 +263,25 @@ function App() {
         throw error;
       }
 
-      const latestData = dataOverride || currentSyncDataRef.current || data;
+      // 冲突解决：比较云端版本与本地最后修改时间，谁新用谁
+      const localUpdatedAt = readStoredTimestamp(LAST_LOCAL_UPDATE_KEY) || 0;
+      const cloudIsNewer = currentUpdatedAt > localUpdatedAt;
+
+      if (cloudIsNewer) {
+        // 服务端更新：放弃本地待推送内容，直接采用服务端数据（另一端删除的笔记就此生效）
+        const applied = await pullFromCloudRef.current?.({ forceApply: true, throwOnError: true });
+        markCloudVersionSynced(currentUpdatedAt, currentSyncDataRef.current);
+        return { updatedAt: currentUpdatedAt, source: 'cloud', applied };
+      }
+
+      // 本地更新：以云端最新版本为基线强推本地数据
       const updatedAt = Math.max(Date.now(), currentUpdatedAt + 1);
-      const result = await syncService.pushData(latestData, {
+      const result = await syncService.pushData(data, {
         baseUpdatedAt: currentUpdatedAt,
         updatedAt,
       });
       if (!result) throw new Error('当前离线，无法同步到云端');
-      return markSynced(result, latestData, updatedAt);
+      return markSynced(result, data, updatedAt);
     } finally {
       isPushingRef.current = false;
     }
@@ -318,13 +337,18 @@ function App() {
       let updated = false;
 
       if (shouldApplyCloud) {
+        const cloudNotes = Array.isArray(cloudData.notes) ? cloudData.notes : null;
+        const mergedNotes = cloudNotes
+          ? mergeNoteLists(cloudNotes, currentData.notes || [])
+          : currentData.notes;
+
         const appliedData = {
           shortcuts: Array.isArray(cloudData.shortcuts) ? cloudData.shortcuts : currentData.shortcuts,
           gridConfig: cloudData.gridConfig && typeof cloudData.gridConfig === 'object' ? cloudData.gridConfig : currentData.gridConfig,
           bgConfig: cloudData.bgConfig && typeof cloudData.bgConfig === 'object' ? cloudData.bgConfig : currentData.bgConfig,
           bgUrl: typeof cloudData.bgUrl === 'string' ? cloudData.bgUrl : currentData.bgUrl,
           todos: Array.isArray(cloudData.todos) ? cloudData.todos : currentData.todos,
-          notes: Array.isArray(cloudData.notes) ? cloudData.notes : currentData.notes,
+          notes: mergedNotes,
         };
 
         if (Array.isArray(cloudData.shortcuts)) {
@@ -369,6 +393,19 @@ function App() {
           markCloudVersionSynced(cloudUpdatedAt || Date.now(), appliedData);
         }
 
+        // 本地存在云端缺失的改动（例如刚新建的笔记）时回推，保证一次同步即收敛
+        if (cloudNotes) {
+          const mergedKey = JSON.stringify(mergeNoteLists(cloudNotes, []));
+          const appliedKey = JSON.stringify(mergeNoteLists(appliedData.notes, []));
+          if (mergedKey !== appliedKey) {
+            try {
+              await pushLocalToCloud(appliedData, { force: true });
+            } catch (err) {
+              if (!err?.isNetworkError) console.warn('笔记合并回推失败:', err);
+            }
+          }
+        }
+
         hasCompletedInitialPullRef.current = true;
         return updated;
       }
@@ -397,6 +434,11 @@ function App() {
       isPullingRef.current = false;
     }
   }, [hasPendingLocalChanges, isPristineDefaultData, markCloudVersionSynced, pushLocalToCloud]);
+
+  // 冲突处理里需要「先拉取云端」，通过 ref 拿到最新的 pullFromCloud，避免循环依赖
+  useEffect(() => {
+    pullFromCloudRef.current = pullFromCloud;
+  }, [pullFromCloud]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -734,12 +776,15 @@ function App() {
 
   const handleDeleteNote = (id) => {
     setNotes(prev => {
-      const updated = prev.filter(note => note.id !== id);
+      // 留下删除墓碑并更新时间，另一端据此判定「这是删除」而不是「还没同步过来」
+      const updated = prev.map(note => (
+        String(note.id) === String(id) ? buildNoteTombstone(note) : note
+      ));
       currentSyncDataRef.current = { ...currentSyncDataRef.current, notes: updated };
       localStorage.setItem('notes', JSON.stringify(updated));
       return updated;
     });
-    if (activeNoteId === id) setActiveNoteId(null);
+    if (String(activeNoteId) === String(id)) setActiveNoteId(null);
     updateLocalTimestamp();
   };
 
