@@ -748,6 +748,22 @@ function App() {
     setIsNotesOpen(true);
   };
 
+  const handleSaveNoteNow = useCallback(async (note) => {
+    if (!note) return { synced: false };
+    updateLocalTimestamp();
+    if (!syncService.isLoggedIn() || !isOnline) return { synced: false };
+    const latestNotes = notes.some(n => n.id === note.id)
+      ? notes.map(n => (n.id === note.id ? note : n))
+      : [note, ...notes];
+    try {
+      await pushLocalToCloud({ ...currentSyncDataRef.current, notes: latestNotes }, { force: false });
+      return { synced: true };
+    } catch (error) {
+      console.warn('笔记同步失败:', error);
+      return { synced: false };
+    }
+  }, [notes, isOnline, pushLocalToCloud]);
+
   const handleImportNotes = (importedNotes) => {
     if (!Array.isArray(importedNotes)) throw new Error('无效的笔记数据');
     const existingIds = new Set(notes.map(n => n.id));
@@ -856,6 +872,7 @@ function App() {
             const applied = await pullFromCloud({ forceApply: true, throwOnError: true });
             if (!applied) throw new Error('云端暂无可应用数据');
           } : undefined}
+          onSaveNote={handleSaveNoteNow}
           isOpen={isNotesOpen}
           onOpenChange={(open) => {
             setIsNotesOpen(open);

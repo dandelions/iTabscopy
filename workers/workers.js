@@ -507,7 +507,7 @@ function renderWebDashboardHtml() {
         <div id="view-notes" class="hidden animate-fade">
           <div class="w-full">
             <!-- 整体容器自适应高度，手机与电脑大屏均友好展示完整滚动 -->
-            <div id="notes-wrapper" class="flex flex-col md:flex-row gap-3 sm:gap-4 min-h-[460px] sm:min-h-[580px] h-[calc(100vh-170px)] sm:h-[75vh] max-h-[860px] min-h-0">
+            <div id="notes-wrapper" class="flex flex-col md:flex-row gap-3 sm:gap-4 h-[calc(100vh-170px)] sm:h-[75vh] min-h-[320px] max-h-[860px]">
               
               <!-- 👈 左侧紧凑笔记列表 (固定宽度 300px，让右侧编辑空间最大化) -->
               <div id="notes-list-panel" class="w-full md:w-72 lg:w-80 shrink-0 flex flex-col bg-black/25 backdrop-blur-md rounded-2xl border border-glass-border p-2.5 sm:p-3 overflow-hidden min-h-0">
@@ -566,15 +566,19 @@ function renderWebDashboardHtml() {
                   </div>
                 </div>
 
-                <!-- ✏️ 编辑模式表单区域 (撑满空间，textarea 支持垂直自由拉大) -->
-                <div id="right-note-editor" class="hidden flex-1 flex flex-col space-y-3 min-h-0 min-w-0">
+                <!-- ✏️ 编辑模式表单区域 (编辑框自适应剩余高度，底部保存按钮始终可见) -->
+                <div id="right-note-editor" class="hidden flex-1 flex flex-col gap-2.5 min-h-0 min-w-0 overflow-hidden">
                   <input id="editor-title" type="text" placeholder="笔记标题..."
                          class="w-full px-3.5 py-2.5 bg-black/40 border border-glass-border rounded-xl text-sm sm:text-base font-semibold text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 transition shrink-0" />
+                  <!-- 编辑框自适应剩余高度，保证底部保存按钮始终可见 -->
                   <textarea id="editor-content" placeholder="输入笔记正文，支持 Markdown 语法与回车自然换行..."
-                            class="w-full flex-1 min-h-[360px] sm:min-h-[440px] px-3.5 sm:px-4 py-3 bg-black/40 border border-glass-border rounded-xl text-xs sm:text-sm sm:text-[14px] text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-400 transition resize-y custom-scrollbar leading-relaxed font-mono min-h-0"></textarea>
-                  <div class="flex justify-end gap-2 pt-1 shrink-0">
-                    <button onclick="cancelEditNote()" class="px-3.5 py-1.5 text-xs text-slate-300 hover:bg-white/10 rounded-lg transition">取消</button>
-                    <button onclick="saveNote()" class="px-4 py-1.5 text-xs font-medium bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg shadow-md transition">保存并同步</button>
+                            class="w-full flex-1 min-h-[120px] px-3.5 sm:px-4 py-3 bg-black/40 border border-glass-border rounded-xl text-xs sm:text-sm sm:text-[14px] text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-400 transition resize-none overflow-y-auto custom-scrollbar leading-relaxed font-mono"></textarea>
+                  <div class="flex items-center justify-between gap-2 shrink-0">
+                    <span class="text-[10px] text-slate-500 hidden sm:inline">支持 Ctrl / ⌘ + S 快速保存，内容会自动暂存到本地</span>
+                    <div class="flex items-center gap-2 ml-auto">
+                      <button onclick="cancelEditNote()" class="px-3.5 py-1.5 text-xs text-slate-300 hover:bg-white/10 rounded-lg transition">取消</button>
+                      <button id="btn-save-note" onclick="saveNote()" class="px-4 py-1.5 text-xs font-medium bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg shadow-md transition active:scale-95">保存并同步</button>
+                    </div>
                   </div>
                 </div>
 
@@ -900,7 +904,23 @@ function renderWebDashboardHtml() {
       const token = localStorage.getItem('itabs_token') || localStorage.getItem('sync_token');
       const email = localStorage.getItem('itabs_email') || localStorage.getItem('sync_email');
 
+      // 笔记编辑器：实时保存草稿 + Ctrl/⌘+S 保存并同步
+      ['editor-title', 'editor-content'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', saveNoteDraft);
+      });
+
       window.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+          const editorEl = document.getElementById('right-note-editor');
+          const editorVisible = editorEl && !editorEl.classList.contains('hidden');
+          if (editorVisible) {
+            e.preventDefault();
+            saveNote();
+            return;
+          }
+        }
+
         if (e.key === 'Escape') {
           closeFolderModal();
           closeSettingsModal();
@@ -1931,6 +1951,34 @@ function renderWebDashboardHtml() {
       }
     }
 
+    // 📝 未保存草稿：编辑过程中实时写入 localStorage，防止误关或刷新导致内容丢失
+    const NOTE_DRAFT_KEY = 'note_draft';
+
+    function readNoteDraft() {
+      try {
+        return JSON.parse(localStorage.getItem(NOTE_DRAFT_KEY) || 'null');
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function saveNoteDraft() {
+      if (!isCreatingNote) return;
+      const titleEl = document.getElementById('editor-title');
+      const contentEl = document.getElementById('editor-content');
+      if (!titleEl || !contentEl) return;
+      const draft = { title: titleEl.value, content: contentEl.value };
+      if (!draft.title && !draft.content) {
+        localStorage.removeItem(NOTE_DRAFT_KEY);
+        return;
+      }
+      localStorage.setItem(NOTE_DRAFT_KEY, JSON.stringify(draft));
+    }
+
+    function clearNoteDraft() {
+      localStorage.removeItem(NOTE_DRAFT_KEY);
+    }
+
     function startCreateNote() {
       isCreatingNote = true;
       selectedNoteIndex = -1;
@@ -1948,8 +1996,10 @@ function renderWebDashboardHtml() {
       document.getElementById('right-note-body').classList.add('hidden');
       document.getElementById('right-note-editor').classList.remove('hidden');
 
-      document.getElementById('editor-title').value = '';
-      document.getElementById('editor-content').value = '';
+      // 恢复上次未保存的草稿，避免误关后内容丢失
+      const draft = readNoteDraft();
+      document.getElementById('editor-title').value = draft?.title || '';
+      document.getElementById('editor-content').value = draft?.content || '';
       document.getElementById('editor-title').focus();
 
       if (window.innerWidth < 768) {
@@ -1980,6 +2030,10 @@ function renderWebDashboardHtml() {
 
     function cancelEditNote() {
       if (isCreatingNote) {
+        const draft = readNoteDraft();
+        const hasDraft = Boolean(draft && (draft.title || draft.content));
+        if (hasDraft && !confirm('放弃这篇未保存的笔记吗？')) return;
+        clearNoteDraft();
         resetRightNotePanel();
       } else if (selectedNoteIndex >= 0) {
         displayNoteDetail(selectedNoteIndex);
@@ -1991,6 +2045,7 @@ function renderWebDashboardHtml() {
       const content = document.getElementById('editor-content').value;
       const now = Date.now();
 
+      if (!currentSyncData) currentSyncData = { shortcuts: [], todos: [], notes: [], updatedAt: 0 };
       if (!Array.isArray(currentSyncData.notes)) currentSyncData.notes = [];
 
       if (isCreatingNote) {
@@ -2012,6 +2067,7 @@ function renderWebDashboardHtml() {
 
       renderNotesList(currentSyncData.notes);
       displayNoteDetail(selectedNoteIndex);
+      clearNoteDraft();
       saveToCloud();
     }
 

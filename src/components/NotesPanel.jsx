@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { X, Plus, Trash2, Check, Download, Upload, Search, StickyNote, ClipboardList, Circle, CheckCircle2, PanelLeftClose, PanelLeftOpen, RefreshCw, Copy, Clock, Calendar } from 'lucide-react';
+import { X, Plus, Trash2, Check, Download, Upload, Search, StickyNote, ClipboardList, Circle, CheckCircle2, PanelLeftClose, PanelLeftOpen, RefreshCw, Copy, Clock, Calendar, Save, CloudUpload } from 'lucide-react';
 import { marked } from 'marked';
 
 const formatTime = (iso) => {
@@ -209,6 +209,7 @@ export default function NotesPanel({
   onToggleTodo,
   onDeleteTodo,
   onRefreshFromCloud,
+  onSaveNote,
   isOpen,
   onOpenChange,
 }) {
@@ -228,6 +229,7 @@ export default function NotesPanel({
     }
     const [refreshState, setRefreshState] = useState('idle');
     const [copyState, setCopyState] = useState(false);
+    const [saveState, setSaveState] = useState('idle');
     const titleInputRef = useRef(null);
     const activeNote = useMemo(() => notes.find(n => n.id === activeNoteId) || null, [notes, activeNoteId]);
     const activeNoteContent = activeNote?.content || '';
@@ -315,6 +317,19 @@ export default function NotesPanel({
             }
         };
         input.click();
+    };
+
+    const handleSaveNote = async () => {
+        if (!activeNote || saveState === 'saving') return;
+        setSaveState('saving');
+        try {
+            const result = await onSaveNote?.(activeNote);
+            setSaveState(result?.synced ? 'synced' : 'local');
+        } catch (e) {
+            console.error('Failed to save note:', e);
+            setSaveState('error');
+        }
+        setTimeout(() => setSaveState('idle'), 2200);
     };
 
     const handleCopyNoteContent = async () => {
@@ -628,6 +643,43 @@ export default function NotesPanel({
                                 {renderRefreshButton()}
                                 {activeNote && (
                                     <>
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleSaveNote();
+                                            }}
+                                            disabled={saveState === 'saving'}
+                                            className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition flex items-center gap-1.5 active:scale-95 disabled:opacity-60 ${
+                                                saveState === 'error'
+                                                    ? 'bg-red-500/20 border-red-500/40 text-red-300'
+                                                    : saveState === 'local'
+                                                        ? 'bg-white/10 border-white/20 text-white/70'
+                                                        : 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30'
+                                            }`}
+                                            title="保存笔记并同步到云端"
+                                        >
+                                            {saveState === 'saving'
+                                                ? <RefreshCw className="h-4 w-4 animate-spin" />
+                                                : saveState === 'synced'
+                                                    ? <Check className="h-4 w-4" />
+                                                    : saveState === 'local'
+                                                        ? <Save className="h-4 w-4" />
+                                                        : saveState === 'error'
+                                                            ? <X className="h-4 w-4" />
+                                                            : <CloudUpload className="h-4 w-4" />}
+                                            <span>
+                                                {saveState === 'saving'
+                                                    ? '保存中'
+                                                    : saveState === 'synced'
+                                                        ? '已同步'
+                                                        : saveState === 'local'
+                                                            ? '已保存'
+                                                            : saveState === 'error'
+                                                                ? '同步失败'
+                                                                : '保存'}
+                                            </span>
+                                        </button>
                                         <button
                                             type="button"
                                             onClick={(e) => {
