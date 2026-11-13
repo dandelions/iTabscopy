@@ -2133,13 +2133,12 @@ function renderWebDashboardHtml() {
 
     function normalizeNoteEntry(note) {
       if (!note || typeof note !== 'object') return null;
-      const id = note.id === undefined || note.id === null ? '' : String(note.id);
-      if (!id) return null;
+      if (note.id === undefined || note.id === null || note.id === '') return null;
       const created = Number(note.createdAt) || 0;
       const updated = Number(note.updatedAt) || created || 0;
+      // 保留 id 原始类型，避免上层严格相等匹配失效
       return {
         ...note,
-        id,
         createdAt: created || updated,
         updatedAt: updated,
       };
@@ -2152,8 +2151,9 @@ function renderWebDashboardHtml() {
       const put = (raw) => {
         const note = normalizeNoteEntry(raw);
         if (!note) return;
-        const existing = byId.get(note.id);
-        if (!existing || note.updatedAt >= existing.updatedAt) byId.set(note.id, note);
+        const key = String(note.id);
+        const existing = byId.get(key);
+        if (!existing || note.updatedAt >= existing.updatedAt) byId.set(key, note);
       };
       (secondaryNotes || []).forEach(put);
       (primaryNotes || []).forEach(put);

@@ -403,7 +403,7 @@ function App() {
           setNotes(appliedData.notes);
           localStorage.setItem('notes', JSON.stringify(appliedData.notes));
           setActiveNoteId(prevId => (
-            prevId && appliedData.notes.some(n => n.id === prevId)
+            prevId && appliedData.notes.some(n => String(n.id) === String(prevId))
               ? prevId
               : null
           ));
@@ -701,7 +701,7 @@ function App() {
   useEffect(() => {
     localStorage.setItem('notes', JSON.stringify(notes));
     const timer = setTimeout(() => {
-      if (activeNoteId && !notes.some(n => n.id === activeNoteId)) {
+      if (activeNoteId && !notes.some(n => String(n.id) === String(activeNoteId))) {
         setActiveNoteId(null);
       }
     }, 0);
@@ -783,7 +783,8 @@ function App() {
   const handleUpdateNote = (id, updates) => {
     setNotes(prev => {
       const updated = prev.map(note => {
-        if (note.id !== id) return note;
+        // 兼容 id 既可能是数字也可能是字符串的情况
+        if (String(note.id) !== String(id)) return note;
         const now = new Date().toISOString();
         if (typeof updates === 'string') {
           return { ...note, content: updates, updatedAt: now };

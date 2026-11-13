@@ -5,13 +5,12 @@ export const NOTE_TOMBSTONE_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 
 export const normalizeNoteEntry = (note) => {
     if (!note || typeof note !== 'object') return null;
-    const id = note.id === undefined || note.id === null ? '' : String(note.id);
-    if (!id) return null;
+    if (note.id === undefined || note.id === null || note.id === '') return null;
     const created = Number(note.createdAt) || 0;
     const updated = Number(note.updatedAt) || created || 0;
+    // 保留 id 的原始类型：上层用严格相等匹配时，数字 id 不能被悄悄改成字符串
     return {
         ...note,
-        id,
         createdAt: created || updated,
         updatedAt: updated,
     };
@@ -23,9 +22,11 @@ export const mergeNoteLists = (primaryNotes = [], secondaryNotes = []) => {
     const put = (raw) => {
         const note = normalizeNoteEntry(raw);
         if (!note) return;
-        const existing = byId.get(note.id);
+        // 用字符串 key 做去重，避免数字 id 与字符串 id 被当成两条
+        const key = String(note.id);
+        const existing = byId.get(key);
         if (!existing || note.updatedAt >= existing.updatedAt) {
-            byId.set(note.id, note);
+            byId.set(key, note);
         }
     };
     (secondaryNotes || []).forEach(put);
