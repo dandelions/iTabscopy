@@ -68,7 +68,12 @@ async function verifyToken(request, env) {
 function jsonResponse(data, status = 200, headers = {}) {
     return new Response(JSON.stringify(data), {
         status,
-        headers: { 'Content-Type': 'application/json', ...headers },
+        headers: {
+            'Content-Type': 'application/json',
+            // 同步接口必须禁止任何中间层缓存，否则另一端删除后本地会读到旧快照
+            'Cache-Control': 'no-store, no-cache, must-revalidate',
+            ...headers,
+        },
     });
 }
 
@@ -132,17 +137,76 @@ async function handleLogout(request, env, corsHeaders) {
     return jsonResponse({ success: true }, 200, corsHeaders);
 }
 
+// =========================================================================
+// 同步数据存取
+// Cloudflare Workers KV 是最终一致的：写入后其他数据中心的读缓存最长 60 秒
+// 才过期，单靠一个 key 会出现「另一端删了笔记，本地要点好几次同步才看到」。
+// 这里用「主副本 + 若干分片副本」来缓解：写入时全部更新，读取时取 updatedAt
+// 最大的那份；拉取只随机读主副本和一个分片，因此总能读到某个刚写入且尚未被
+// 本数据中心缓存过的副本，绝大部分情况下一次拉取就能拿到最新数据。
+// =========================================================================
+const SYNC_SHARD_COUNT = 4;
+
+const syncKey = (email) => `sync:${email}`;
+const syncShardKey = (email, index) => `sync:${email}:s${index}`;
+
+function pickLatestSync(rawValues) {
+    let latest = null;
+    let latestUpdatedAt = -Infinity;
+    for (const raw of rawValues) {
+        if (!raw) continue;
+        let parsed;
+        try {
+            parsed = JSON.parse(raw);
+        } catch (e) {
+            continue;
+        }
+        const timestamp = Number(parsed?.updatedAt);
+        const score = Number.isFinite(timestamp) ? timestamp : 0;
+        if (latest === null || score > latestUpdatedAt) {
+            latest = parsed;
+            latestUpdatedAt = score;
+        }
+    }
+    return latest;
+}
+
+async function readAllSyncReplicas(env, email) {
+    const keys = [syncKey(email)];
+    for (let i = 0; i < SYNC_SHARD_COUNT; i += 1) keys.push(syncShardKey(email, i));
+    const values = await Promise.all(keys.map((key) => env.NewTab_KV.get(key)));
+    return pickLatestSync(values);
+}
+
+// 拉取时只随机读一个分片，避免把全部分片都读进本数据中心的 60 秒读缓存
+async function readSyncForPull(env, email) {
+    const shardIndex = Math.floor(Math.random() * SYNC_SHARD_COUNT);
+    const values = await Promise.all([
+        env.NewTab_KV.get(syncKey(email)),
+        env.NewTab_KV.get(syncShardKey(email, shardIndex)),
+    ]);
+    return pickLatestSync(values);
+}
+
+async function writeSyncReplicas(env, email, syncData) {
+    const payload = JSON.stringify(syncData);
+    const writes = [env.NewTab_KV.put(syncKey(email), payload)];
+    for (let i = 0; i < SYNC_SHARD_COUNT; i += 1) {
+        writes.push(env.NewTab_KV.put(syncShardKey(email, i), payload));
+    }
+    await Promise.all(writes);
+}
+
 async function handlePull(request, env, corsHeaders) {
     const email = await verifyToken(request, env);
-    const syncData = await env.NewTab_KV.get(`sync:${email}`);
-    return jsonResponse({ data: syncData ? JSON.parse(syncData) : null }, 200, corsHeaders);
+    const syncData = await readSyncForPull(env, email);
+    return jsonResponse({ data: syncData }, 200, corsHeaders);
 }
 
 async function handlePush(request, env, corsHeaders) {
     const email = await verifyToken(request, env);
     const data = await request.json();
-    const existingData = await env.NewTab_KV.get(`sync:${email}`);
-    const existing = existingData ? JSON.parse(existingData) : null;
+    const existing = await readAllSyncReplicas(env, email);
     const existingUpdatedAt = Number(existing?.updatedAt);
     const hasExistingData = Boolean(existing);
     const hasExistingTimestamp = Number.isFinite(existingUpdatedAt);
@@ -177,9 +241,16 @@ async function handlePush(request, env, corsHeaders) {
         }
     }
 
-    const syncData = { ...data, updatedAt: hasIncomingTimestamp ? incomingUpdatedAt : Date.now() };
+    // 版本号必须严格递增：两端在同一毫秒内各写一次时 updatedAt 会相等，
+    // 读取侧就无法判断哪份副本更新，会一直读到旧快照
+    let nextUpdatedAt = hasIncomingTimestamp ? incomingUpdatedAt : Date.now();
+    if (hasExistingTimestamp && nextUpdatedAt <= existingUpdatedAt) {
+        nextUpdatedAt = existingUpdatedAt + 1;
+    }
+
+    const syncData = { ...data, updatedAt: nextUpdatedAt };
     delete syncData.baseUpdatedAt;
-    await env.NewTab_KV.put(`sync:${email}`, JSON.stringify(syncData));
+    await writeSyncReplicas(env, email, syncData);
     return jsonResponse({ success: true, updatedAt: syncData.updatedAt }, 200, corsHeaders);
 }
 
@@ -887,10 +958,28 @@ function renderWebDashboardHtml() {
         updateOverlaySettingDisplay();
       }, 60 * 1000);
 
+      // 🔁 后台静默轮询云端：Cloudflare KV 跨区域最长 60 秒才一致，
+      // 定时拉取可让另一端（扩展/其他浏览器）的删除与修改自动出现在本页，无需手点同步
+      const POLL_INTERVAL_MS = 20 * 1000;
+      setInterval(() => {
+        const token = localStorage.getItem('itabs_token') || localStorage.getItem('sync_token');
+        if (!token) return;
+        if (document.visibilityState !== 'visible') return;
+        if (isManualSyncing || isPollingCloud) return;
+        if (isNoteEditing()) return; // 正在写笔记时不打断
+        isPollingCloud = true;
+        fetchCloudData(token).finally(() => { isPollingCloud = false; });
+      }, POLL_INTERVAL_MS);
+
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
           applyBgConfig();
           updateOverlaySettingDisplay();
+          const token = localStorage.getItem('itabs_token') || localStorage.getItem('sync_token');
+          if (token && !isManualSyncing && !isPollingCloud && !isNoteEditing()) {
+            isPollingCloud = true;
+            fetchCloudData(token).finally(() => { isPollingCloud = false; });
+          }
         }
       });
 
@@ -1013,92 +1102,163 @@ function renderWebDashboardHtml() {
       }
     }
 
+    // 最近一次成功应用到界面的云端版本号，用于判断远端是否真的有新数据
+    let lastAppliedCloudUpdatedAt = 0;
+    let isManualSyncing = false;
+    let isPollingCloud = false;
+
+    function isNoteEditing() {
+      if (isCreatingNote) return true;
+      const editorEl = document.getElementById('right-note-editor');
+      return Boolean(editorEl && !editorEl.classList.contains('hidden'));
+    }
+
+    function getSelectedNoteId() {
+      const notes = currentSyncData?.notes || [];
+      return notes[selectedNoteIndex]?.id || null;
+    }
+
+    // 🧩 统一应用云端快照：按笔记 id 恢复选中，避免另一端删除后索引错位
+    function applyCloudSnapshot(data) {
+      // 跨数据中心读到的是旧副本时不能回退界面，否则刚拉到的删除结果会被旧快照覆盖
+      const incomingUpdatedAt = Number(data?.updatedAt) || 0;
+      if (data && incomingUpdatedAt && lastAppliedCloudUpdatedAt && incomingUpdatedAt < lastAppliedCloudUpdatedAt) {
+        return false;
+      }
+
+      const prevSelectedNoteId = getSelectedNoteId();
+      currentSyncData = data || { shortcuts: [], todos: [], notes: [] };
+
+      if (currentSyncData.gridConfig && typeof currentSyncData.gridConfig === 'object') {
+        gridConfig = { ...gridConfig, ...currentSyncData.gridConfig };
+        if (gridConfig.cols > 5) gridConfig.cols = 5;
+        localStorage.setItem('grid_config', JSON.stringify(gridConfig));
+      }
+      if (currentSyncData.bgConfig && typeof currentSyncData.bgConfig === 'object') {
+        bgConfig = { ...bgConfig, ...currentSyncData.bgConfig };
+        localStorage.setItem('bg_config', JSON.stringify(bgConfig));
+      }
+      applyGridConfig();
+      applyBgConfig();
+
+      const notes = Array.isArray(currentSyncData.notes) ? currentSyncData.notes : [];
+      selectedNoteIndex = prevSelectedNoteId ? notes.findIndex((n) => n.id === prevSelectedNoteId) : -1;
+      isCreatingNote = false;
+
+      renderDashboard(currentSyncData);
+      lastAppliedCloudUpdatedAt = Number(currentSyncData.updatedAt) || Date.now();
+      return true;
+    }
+
+    // 单次拉取：加时间戳参数与 no-store，避免浏览器/中间层缓存出旧快照
+    async function requestCloudPull(token) {
+      const res = await fetch('/api/sync/pull?ts=' + Date.now(), {
+        headers: { 'Authorization': 'Bearer ' + token },
+        cache: 'no-store',
+      });
+      if (res.status === 401) {
+        logout();
+        return null;
+      }
+      const result = await res.json();
+      const data = result?.data || null;
+      return { data, updatedAt: Number(data?.updatedAt) || 0 };
+    }
+
     async function fetchCloudData(token) {
       const syncBtn = document.getElementById('sync-btn');
       const syncText = document.getElementById('sync-text');
-      const syncIcon = document.getElementById('sync-icon');
-      if (syncBtn) syncBtn.classList.remove('hidden');
 
       try {
-        const res = await fetch('/api/sync/pull', {
-          headers: { 'Authorization': 'Bearer ' + token }
-        });
-        if (res.status === 401) {
-          logout();
+        const result = await requestCloudPull(token);
+        if (!result) return;
+
+        // 正在写新笔记时不要被后台轮询打断（草稿已自动暂存到本地）
+        if (isNoteEditing() && result.updatedAt <= lastAppliedCloudUpdatedAt) {
+          if (syncBtn) syncBtn.classList.remove('hidden');
           return;
         }
-        const result = await res.json();
-        currentSyncData = result.data || { shortcuts: [], todos: [], notes: [] };
-        if (currentSyncData.gridConfig && typeof currentSyncData.gridConfig === 'object') {
-          gridConfig = { ...gridConfig, ...currentSyncData.gridConfig };
-          if (gridConfig.cols > 5) gridConfig.cols = 5;
-          localStorage.setItem('grid_config', JSON.stringify(gridConfig));
+
+        // 云端还没数据时不要清空本地，避免首次同步把界面刷成空白
+        if (!result.data) {
+          if (syncBtn) syncBtn.classList.remove('hidden');
+          return;
         }
-        if (currentSyncData.bgConfig && typeof currentSyncData.bgConfig === 'object') {
-          bgConfig = { ...bgConfig, ...currentSyncData.bgConfig };
-          localStorage.setItem('bg_config', JSON.stringify(bgConfig));
-        }
-        applyGridConfig();
-        applyBgConfig();
-        renderDashboard(currentSyncData);
-        if (syncText) syncText.innerText = '已同步';
+
+        applyCloudSnapshot(result.data);
         if (syncBtn) {
+          syncBtn.classList.remove('hidden');
           syncBtn.className = 'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/25 transition active:scale-95 cursor-pointer select-none';
         }
+        if (syncText) syncText.innerText = '已同步';
       } catch (err) {
         console.error('拉取数据失败:', err);
         if (syncText) syncText.innerText = '离线模式';
       }
     }
 
-    // 🔄 手动拉取云端数据并同步
+    // 🔄 手动同步：Cloudflare KV 跨区域最长 60 秒才一致，命中新版本前自动重试，
+    // 避免用户反复点按钮却每次读到同一份旧快照
+    const SYNC_RETRY_DELAYS = [3000, 3000, 5000, 8000, 10000, 10000];
+
     async function manualSync() {
       const token = localStorage.getItem('itabs_token') || localStorage.getItem('sync_token');
-      if (!token) return;
+      if (!token || isManualSyncing) return;
 
       const syncBtn = document.getElementById('sync-btn');
       const syncIcon = document.getElementById('sync-icon');
       const syncText = document.getElementById('sync-text');
 
-      syncIcon.classList.add('animate-spin');
-      syncText.innerText = '同步中...';
-      syncBtn.className = 'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30 transition cursor-wait';
-      syncBtn.disabled = true;
+      isManualSyncing = true;
+      if (syncIcon) syncIcon.classList.add('animate-spin');
+      if (syncText) syncText.innerText = '同步中...';
+      if (syncBtn) {
+        syncBtn.className = 'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30 transition cursor-wait';
+        syncBtn.disabled = true;
+      }
 
       try {
-        const res = await fetch('/api/sync/pull', {
-          headers: { 'Authorization': 'Bearer ' + token }
-        });
-        if (res.status === 401) {
-          logout();
-          return;
-        }
-        const result = await res.json();
-        if (result.data) {
-          currentSyncData = result.data;
-          if (currentSyncData.gridConfig && typeof currentSyncData.gridConfig === 'object') {
-            gridConfig = { ...gridConfig, ...currentSyncData.gridConfig };
-            if (gridConfig.cols > 5) gridConfig.cols = 5;
-            localStorage.setItem('grid_config', JSON.stringify(gridConfig));
+        if (isNoteEditing()) saveNoteDraft();
+
+        const baseline = lastAppliedCloudUpdatedAt;
+        let latest = null;
+        let attempts = 0;
+
+        while (attempts <= SYNC_RETRY_DELAYS.length) {
+          const result = await requestCloudPull(token);
+          if (!result) return;
+
+          const isNewer = result.updatedAt > baseline;
+          const isFirstKnown = baseline === 0 && result.data !== null;
+          if (isNewer || isFirstKnown || result.data === null) {
+            latest = result;
+            break;
           }
-          if (currentSyncData.bgConfig && typeof currentSyncData.bgConfig === 'object') {
-            bgConfig = { ...bgConfig, ...currentSyncData.bgConfig };
-            localStorage.setItem('bg_config', JSON.stringify(bgConfig));
-          }
-          applyGridConfig();
-          applyBgConfig();
-          renderDashboard(result.data);
+
+          const delay = SYNC_RETRY_DELAYS[attempts];
+          if (delay === undefined) break;
+          attempts += 1;
+          if (syncText) syncText.innerText = '等待云端更新 ' + attempts + '/' + SYNC_RETRY_DELAYS.length;
+          await new Promise((resolve) => setTimeout(resolve, delay));
         }
-        syncText.innerText = '已同步';
-        syncBtn.className = 'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/25 transition active:scale-95 cursor-pointer';
+
+        if (latest && latest.data) applyCloudSnapshot(latest.data);
+
+        if (syncText) syncText.innerText = '已同步';
+        if (syncBtn) {
+          syncBtn.className = 'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/25 transition active:scale-95 cursor-pointer';
+        }
       } catch (err) {
         console.error('手动同步失败:', err);
-        syncText.innerText = '同步失败';
-        syncBtn.className = 'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-rose-500/15 text-rose-300 border border-rose-500/30 transition';
+        if (syncText) syncText.innerText = '同步失败';
+        if (syncBtn) {
+          syncBtn.className = 'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-rose-500/15 text-rose-300 border border-rose-500/30 transition';
+        }
       } finally {
+        isManualSyncing = false;
         setTimeout(() => {
-          syncIcon.classList.remove('animate-spin');
-          syncBtn.disabled = false;
+          if (syncIcon) syncIcon.classList.remove('animate-spin');
+          if (syncBtn) syncBtn.disabled = false;
         }, 600);
       }
     }
@@ -1140,14 +1300,21 @@ function renderWebDashboardHtml() {
         const result = await res.json();
         if (res.ok) {
           currentSyncData.updatedAt = result.updatedAt;
+          // 记录自己写入的版本，避免之后轮询到更旧的副本时把界面回退
+          lastAppliedCloudUpdatedAt = Number(result.updatedAt) || newUpdatedAt;
           if (syncText) syncText.innerText = '已同步';
           if (syncBtn) {
             syncBtn.className = 'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/25 transition active:scale-95 cursor-pointer';
           }
         } else {
-          if (syncText) syncText.innerText = '同步冲突';
+          const isConflict = String(result.code || '').indexOf('SYNC_CONFLICT') === 0;
+          if (syncText) syncText.innerText = isConflict ? '云端有更新' : '同步冲突';
           if (syncBtn) {
             syncBtn.className = 'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-rose-500/15 text-rose-400 border border-rose-500/30 transition';
+          }
+          // 冲突说明另一端已写入更新版本，先拉取云端最新，避免本地停留在旧快照
+          if (isConflict) {
+            try { await fetchCloudData(token); } catch (e) { console.warn('冲突后拉取失败', e); }
           }
         }
       } catch (e) {
