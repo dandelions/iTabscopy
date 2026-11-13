@@ -206,6 +206,29 @@ function App() {
     return Boolean(lastLocalUpdate && (!lastCloudUpdate || lastLocalUpdate > lastCloudUpdate));
   }, []);
 
+  // 基线条目：上次同步到云端的笔记 id 集合。
+  // 旧版客户端删除笔记时没有墓碑，只能靠「云端缺失 + 基线里存在」识别删除。
+  const readBaselineNoteIds = useCallback(() => {
+    const raw = localStorage.getItem(LAST_SYNCED_SNAPSHOT_KEY);
+    if (!raw) return new Set();
+    try {
+      const parsed = JSON.parse(raw);
+      const notes = Array.isArray(parsed?.notes) ? parsed.notes : [];
+      return new Set(notes.map((note) => String(note?.id)));
+    } catch {
+      return new Set();
+    }
+  }, []);
+
+  const applyBaselineDeletions = useCallback((cloudNotes, localNotes) => {
+    const baselineIds = readBaselineNoteIds();
+    if (baselineIds.size === 0) return localNotes;
+    const cloudIds = new Set((cloudNotes || []).map((note) => String(note.id)));
+    return (localNotes || []).filter((note) => (
+      cloudIds.has(String(note?.id)) || !baselineIds.has(String(note?.id))
+    ));
+  }, [readBaselineNoteIds]);
+
   const createBackupData = useCallback(() => syncService.createBackupData({
     todos,
     // 备份/导出只包含可见笔记，墓碑仅用于同步
@@ -339,7 +362,7 @@ function App() {
       if (shouldApplyCloud) {
         const cloudNotes = Array.isArray(cloudData.notes) ? cloudData.notes : null;
         const mergedNotes = cloudNotes
-          ? mergeNoteLists(cloudNotes, currentData.notes || [])
+          ? mergeNoteLists(cloudNotes, applyBaselineDeletions(cloudNotes, currentData.notes || []))
           : currentData.notes;
 
         const appliedData = {
@@ -433,7 +456,7 @@ function App() {
     } finally {
       isPullingRef.current = false;
     }
-  }, [hasPendingLocalChanges, isPristineDefaultData, markCloudVersionSynced, pushLocalToCloud]);
+  }, [hasPendingLocalChanges, isPristineDefaultData, markCloudVersionSynced, pushLocalToCloud, applyBaselineDeletions]);
 
   // 冲突处理里需要「先拉取云端」，通过 ref 拿到最新的 pullFromCloud，避免循环依赖
   useEffect(() => {

@@ -197,10 +197,59 @@ async function writeSyncReplicas(env, email, syncData) {
     await Promise.all(writes);
 }
 
+// =========================================================================
+// 旧版客户端兼容
+// v1.36.4 及更早的扩展不认识删除墓碑：拉取时会把它当成一篇空笔记显示，
+// 推送时又会整份覆盖把墓碑抹掉。因此：
+//  - 拉取：客户端未声明支持 schema 2 时，过滤掉墓碑再返回
+//  - 推送：云端已有的墓碑优先，防止旧客户端用旧数据把已删除的笔记复活
+// =========================================================================
+const SYNC_SCHEMA_TOMBSTONES = 2;
+
+const getClientSchema = (request) => {
+    const raw = request.headers.get('X-Sync-Schema');
+    const value = Number(raw);
+    return Number.isFinite(value) && value > 0 ? value : 1;
+};
+
+const stripTombstones = (syncData) => {
+    if (!syncData || !Array.isArray(syncData.notes)) return syncData;
+    return { ...syncData, notes: syncData.notes.filter((note) => !note?.deleted) };
+};
+
+// 墓碑优先：已删除的笔记不会被旧客户端的旧快照复活
+const applyTombstoneProtection = (existing, incoming) => {
+    if (!existing || !Array.isArray(existing.notes) || !Array.isArray(incoming?.notes)) return incoming;
+    const tombstones = new Map();
+    for (const note of existing.notes) {
+        if (note?.deleted && note.id !== undefined && note.id !== null) {
+            tombstones.set(String(note.id), note);
+        }
+    }
+    if (tombstones.size === 0) return incoming;
+
+    const kept = incoming.notes.map((note) => {
+        const tombstone = note?.id === undefined || note?.id === null ? null : tombstones.get(String(note.id));
+        if (tombstone && (Number(tombstone.updatedAt) || 0) >= (Number(note?.updatedAt) || 0)) {
+            return tombstone;
+        }
+        return note;
+    });
+
+    // 旧客户端整份推送时会把墓碑整个丢掉，这里补回去
+    const incomingIds = new Set(incoming.notes.map((note) => String(note?.id)));
+    for (const [id, tombstone] of tombstones) {
+        if (!incomingIds.has(id)) kept.push(tombstone);
+    }
+
+    return { ...incoming, notes: kept };
+};
+
 async function handlePull(request, env, corsHeaders) {
     const email = await verifyToken(request, env);
     const syncData = await readSyncForPull(env, email);
-    return jsonResponse({ data: syncData }, 200, corsHeaders);
+    const payload = getClientSchema(request) >= SYNC_SCHEMA_TOMBSTONES ? syncData : stripTombstones(syncData);
+    return jsonResponse({ data: payload }, 200, corsHeaders);
 }
 
 async function handlePush(request, env, corsHeaders) {
@@ -248,7 +297,10 @@ async function handlePush(request, env, corsHeaders) {
         nextUpdatedAt = existingUpdatedAt + 1;
     }
 
-    const syncData = { ...data, updatedAt: nextUpdatedAt };
+    // 旧版客户端不认识墓碑，整份推送会把它抹掉或把已删除的笔记写回来
+    const protectedData = applyTombstoneProtection(existing, data);
+
+    const syncData = { ...protectedData, updatedAt: nextUpdatedAt };
     delete syncData.baseUpdatedAt;
     await writeSyncReplicas(env, email, syncData);
     return jsonResponse({ success: true, updatedAt: syncData.updatedAt }, 200, corsHeaders);
@@ -905,6 +957,9 @@ function renderWebDashboardHtml() {
   <script>
     let isRegisterMode = false;
     let currentSyncData = null;
+    // 同步协议版本：>= 2 时客户端认识 notes 里的 deleted 墓碑
+    const ITABS_SYNC_SCHEMA = 2;
+    const SYNC_BASELINE_KEY = 'itabs_sync_baseline';
     let selectedNoteIndex = -1;
     let isCreatingNote = false;
     let currentTab = 'shortcuts';
@@ -1118,6 +1173,36 @@ function renderWebDashboardHtml() {
       return notes[selectedNoteIndex]?.id || null;
     }
 
+    // 基线：上一次成功同步时云端拥有的笔记 id 集合，用于识别「云端缺失 = 另一端删除」
+    // （旧版扩展删除笔记时没有墓碑，只能靠缺失判断）
+    function readSyncBaselineIds() {
+      try {
+        const raw = JSON.parse(localStorage.getItem(SYNC_BASELINE_KEY) || '[]');
+        return new Set((Array.isArray(raw) ? raw : []).map((item) => String(item?.id ?? item)));
+      } catch (e) {
+        return new Set();
+      }
+    }
+
+    function writeSyncBaselineIds(notes) {
+      const ids = (notes || [])
+        .filter((note) => note && note.id !== undefined && note.id !== null)
+        .map((note) => String(note.id));
+      localStorage.setItem(SYNC_BASELINE_KEY, JSON.stringify(ids));
+    }
+
+    // 云端没有、但基线里存在，且本地也没有更新的修改 → 视为另一端删除
+    function applyBaselineDeletions(cloudNotes, localNotes, baselineIds) {
+      if (!baselineIds || baselineIds.size === 0) return localNotes;
+      const cloudIds = new Set((cloudNotes || []).map((n) => String(n.id)));
+      return (localNotes || []).filter((note) => {
+        const id = String(note?.id);
+        if (cloudIds.has(id)) return true;
+        // 云端没有：如果基线里有，说明另一端删除了它
+        return !baselineIds.has(id);
+      });
+    }
+
     // 🧩 统一应用云端快照：按笔记 id 合并（每条笔记带 updatedAt，删除以墓碑参与比较），
     // 合并结果与云端不一致时回推，保证一次同步即收敛
     function applyCloudSnapshot(data) {
@@ -1129,7 +1214,9 @@ function renderWebDashboardHtml() {
 
       const prevSelectedNoteId = getSelectedNoteId();
       const cloudNotes = Array.isArray(data?.notes) ? data.notes : [];
-      const localNotes = Array.isArray(currentSyncData?.notes) ? currentSyncData.notes : [];
+      const rawLocalNotes = Array.isArray(currentSyncData?.notes) ? currentSyncData.notes : [];
+      const baselineIds = readSyncBaselineIds();
+      const localNotes = applyBaselineDeletions(cloudNotes, rawLocalNotes, baselineIds);
       const normalizedCloudNotes = mergeNoteLists(cloudNotes, []);
       const mergedNotes = mergeNoteLists(cloudNotes, localNotes);
 
@@ -1156,6 +1243,7 @@ function renderWebDashboardHtml() {
       renderDashboard(currentSyncData);
       lastAppliedCloudUpdatedAt = Number(currentSyncData.updatedAt) || Date.now();
       localStorage.setItem('itabs_sync_cursor', String(lastAppliedCloudUpdatedAt));
+      writeSyncBaselineIds(mergedNotes.filter((n) => !n.deleted));
 
       // 本地有云端缺失的改动（例如刚新建的笔记）时把合并结果推回去，单轮收敛
       const hasLocalOnlyChange = JSON.stringify(mergedNotes) !== JSON.stringify(normalizedCloudNotes);
@@ -1168,7 +1256,11 @@ function renderWebDashboardHtml() {
     // 单次拉取：加时间戳参数与 no-store，避免浏览器/中间层缓存出旧快照
     async function requestCloudPull(token) {
       const res = await fetch('/api/sync/pull?ts=' + Date.now(), {
-        headers: { 'Authorization': 'Bearer ' + token },
+        headers: {
+          'Authorization': 'Bearer ' + token,
+          // 声明认识删除墓碑，服务端才会原样返回 deleted 条目
+          'X-Sync-Schema': String(ITABS_SYNC_SCHEMA),
+        },
         cache: 'no-store',
       });
       if (res.status === 401) {
@@ -1310,7 +1402,8 @@ function renderWebDashboardHtml() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + token
+            'Authorization': 'Bearer ' + token,
+            'X-Sync-Schema': String(ITABS_SYNC_SCHEMA)
           },
           body: JSON.stringify(payload)
         });
@@ -1319,6 +1412,7 @@ function renderWebDashboardHtml() {
           currentSyncData.updatedAt = result.updatedAt;
           // 记录自己写入的版本，避免之后轮询到更旧的副本时把界面回退
           lastAppliedCloudUpdatedAt = Number(result.updatedAt) || newUpdatedAt;
+          writeSyncBaselineIds((currentSyncData.notes || []).filter((n) => !n.deleted));
           if (syncText) syncText.innerText = '已同步';
           if (syncBtn) {
             syncBtn.className = 'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/25 transition active:scale-95 cursor-pointer';

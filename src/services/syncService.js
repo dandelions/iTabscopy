@@ -3,6 +3,8 @@ const LAST_CLOUD_UPDATE_KEY = 'last_cloud_update';
 const LAST_LOCAL_UPDATE_KEY = 'last_local_update';
 const LAST_SYNCED_SNAPSHOT_KEY = 'last_synced_snapshot';
 const NETWORK_ERROR_MESSAGE = '无法连接同步服务器，请检查 Worker 地址或网络状态';
+// 同步协议版本：>= 2 时客户端认识 notes 里的 deleted 墓碑
+const SYNC_SCHEMA_TOMBSTONES = '2';
 
 const normalizeWorkerUrl = (url = '') => {
     const trimmed = String(url).trim();
@@ -116,7 +118,9 @@ class SyncService {
     async requestWorker(path, options = {}) {
         const workerUrl = this.requireWorkerUrl();
         try {
-            return await fetch(`${workerUrl}${path}`, options);
+            // 声明支持删除墓碑，服务端才会把 deleted 条目原样返回
+            const headers = { ...(options.headers || {}), 'X-Sync-Schema': SYNC_SCHEMA_TOMBSTONES };
+            return await fetch(`${workerUrl}${path}`, { ...options, headers, cache: 'no-store' });
         } catch (error) {
             throw createNetworkError(error, workerUrl);
         }
