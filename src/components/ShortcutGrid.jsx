@@ -64,6 +64,76 @@ const calculateGaps = (cols, rows, screenWidth, iconSize, leftOffset = 0) => {
     return { colGap, rowGap };
 };
 
+// ⚡ 高度自适应：先收行距，再整体缩放，最后才减少每页行数，保证矮窗口里也能完整看到整页图标
+const LABEL_BLOCK_HEIGHT = 28; // 图标标题：行高约 20px + mt-2 间距 8px
+const GRID_PADDING_Y = 32; // 网格容器 py-4 的上下内边距
+const MIN_ROW_GAP = 16;
+const MIN_FIT_SCALE = 0.78; // 低于此比例时改为减少每页行数，避免图标和标题缩得看不清
+const GRID_BOTTOM_RESERVE = 40; // Layout 底部 p-8(32px) + 余量
+const PAGINATION_RESERVE = 112; // 底部固定分页条（bottom-8 + 按钮高度）+ Layout 内边距
+const FALLBACK_GRID_TOP = 160; // 拿不到网格实际位置时的兜底（顶栏 + 搜索框）
+
+const computeGridLayout = ({ viewportWidth, viewportHeight, viewportTop, shortcutCount, cols, rows, iconSize, leftOffset = 0 }) => {
+    // 1. 列数只受宽度限制（原有逻辑）
+    const availableWidth = Math.max(320, viewportWidth - 48 - leftOffset);
+    const itemWidth = iconSize + 24;
+    const previewGap = calculateGaps(cols, rows, viewportWidth, iconSize, leftOffset).colGap;
+    const maxColsFit = Math.max(1, Math.floor((availableWidth + previewGap) / (itemWidth + previewGap)));
+    const fitCols = Math.max(1, Math.min(cols, maxColsFit));
+
+    const preferred = calculateGaps(fitCols, rows, viewportWidth, iconSize, leftOffset);
+    const requiredWidth = (fitCols * itemWidth) + ((fitCols - 1) * preferred.colGap);
+    const widthScale = requiredWidth > availableWidth ? availableWidth / requiredWidth : 1;
+
+    // 2. 行数、行距、缩放受可用高度限制
+    const itemHeight = iconSize + LABEL_BLOCK_HEIGHT;
+
+    const fitVertically = (reserve) => {
+        const availableHeight = Math.max(60, viewportHeight - viewportTop - reserve);
+        const naturalHeight = (rows * itemHeight) + ((rows - 1) * preferred.rowGap) + GRID_PADDING_Y;
+
+        if (naturalHeight <= availableHeight) {
+            return { rows, rowGap: preferred.rowGap, scale: 1 };
+        }
+
+        const rowGap = Math.max(
+            MIN_ROW_GAP,
+            Math.floor((availableHeight - (rows * itemHeight) - GRID_PADDING_Y) / Math.max(1, rows - 1))
+        );
+        const compactHeight = (rows * itemHeight) + ((rows - 1) * rowGap) + GRID_PADDING_Y;
+        const scale = Math.min(1, availableHeight / compactHeight);
+
+        if (scale >= MIN_FIT_SCALE) {
+            return { rows, rowGap, scale };
+        }
+
+        // 2) 缩到下限仍放不下时才减少每页行数：以“缩放到下限刚好放得下”为界，避免白白浪费高度
+        const rowsThatFit = Math.floor(
+            ((availableHeight / MIN_FIT_SCALE) - GRID_PADDING_Y + MIN_ROW_GAP) / (itemHeight + MIN_ROW_GAP)
+        );
+        const fitRows = Math.max(1, Math.min(rows, rowsThatFit));
+        const fitHeight = (fitRows * itemHeight) + ((fitRows - 1) * MIN_ROW_GAP) + GRID_PADDING_Y;
+
+        return { rows: fitRows, rowGap: MIN_ROW_GAP, scale: Math.min(1, availableHeight / fitHeight) };
+    };
+
+    const fitsOnOnePage = shortcutCount <= fitCols * rows;
+    let vertical = fitVertically(fitsOnOnePage ? GRID_BOTTOM_RESERVE : PAGINATION_RESERVE);
+
+    if (fitsOnOnePage && vertical.rows < rows) {
+        // 压缩行数后会多出分页条，重算一次给它让位
+        vertical = fitVertically(PAGINATION_RESERVE);
+    }
+
+    return {
+        cols: fitCols,
+        rows: vertical.rows,
+        colGap: preferred.colGap,
+        rowGap: vertical.rowGap,
+        scale: Math.min(widthScale, vertical.scale),
+    };
+};
+
 const MERGE_PREVIEW_RATIO = 0.01;
 const MERGE_PREVIEW_DISTANCE_RATIO = 0.55;
 
@@ -440,7 +510,7 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
     const [isEditing, setIsEditing] = useState(false);
     const [contextShortcutId, setContextShortcutId] = useState(null);
     const [editingShortcut, setEditingShortcut] = useState(null);
-    const [responsiveCols, setResponsiveCols] = useState(cols);
+    const [layout, setLayout] = useState({ cols, rows, colGap: 48, rowGap: 40, scale: 1 });
     const [activeId, setActiveId] = useState(null);
     const [openFolder, setOpenFolder] = useState(null);
     const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
@@ -454,11 +524,6 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
     const accumulatedRef = useRef(0);
     const lastTimeRef = useRef(0);
     const isChangingRef = useRef(false);
-
-    const [screenWidth, setScreenWidth] = useState(() => typeof window !== 'undefined' ? window.innerWidth : 1280);
-
-    const { colGap, rowGap } = calculateGaps(responsiveCols, rows, screenWidth, iconSize, leftOffset);
-    const [scale, setScale] = useState(1);
 
     const collisionDetectionStrategy = useCallback((args) => {
         const overlapCollisions = rectIntersection(args);
@@ -818,37 +883,30 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
         setIsFolderModalOpen(true);
     };
 
+    const updateLayout = useCallback(() => {
+        const containerTop = containerRef.current?.getBoundingClientRect().top;
+
+        setLayout(computeGridLayout({
+            viewportWidth: window.innerWidth,
+            viewportHeight: window.innerHeight,
+            viewportTop: containerTop ?? FALLBACK_GRID_TOP,
+            shortcutCount: shortcuts.length,
+            cols,
+            rows,
+            iconSize,
+            leftOffset,
+        }));
+    }, [cols, rows, iconSize, leftOffset, shortcuts.length]);
+
     useEffect(() => {
-        const handleResize = () => {
-            const currentWidth = window.innerWidth;
-            setScreenWidth(currentWidth);
+        updateLayout();
+        window.addEventListener('resize', updateLayout);
+        return () => window.removeEventListener('resize', updateLayout);
+    }, [updateLayout]);
 
-            const padding = 48;
-            const availableWidth = Math.max(320, currentWidth - padding - leftOffset);
+    const { cols: responsiveCols, rows: responsiveRows, colGap, rowGap, scale } = layout;
 
-            const previewGap = calculateGaps(cols, rows, currentWidth, iconSize, leftOffset).colGap;
-            const itemRealWidth = iconSize + 24;
-            const maxColsFit = Math.max(1, Math.floor((availableWidth + previewGap) / (itemRealWidth + previewGap)));
-            const newCols = Math.max(1, Math.min(cols, maxColsFit));
-            setResponsiveCols(newCols);
-
-            const gaps = calculateGaps(newCols, rows, currentWidth, iconSize, leftOffset);
-            const requiredWidth = (newCols * itemRealWidth) + ((newCols - 1) * gaps.colGap);
-
-            if (requiredWidth > availableWidth) {
-                const newScale = availableWidth / requiredWidth;
-                setScale(Math.min(1, newScale));
-            } else {
-                setScale(1);
-            }
-        };
-
-        handleResize();
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, [cols, rows, iconSize, leftOffset]);
-
-    const itemsPerPage = responsiveCols * rows;
+    const itemsPerPage = responsiveCols * responsiveRows;
 
     const { pages, totalPages } = useMemo(() => {
         const total = itemsPerPage > 0 ? Math.ceil(shortcuts.length / itemsPerPage) : 0;
@@ -958,6 +1016,9 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
     const activeNodeShortcut = activeId ? findShortcut(activeId)?.shortcut : null;
 
     const exactGridWidth = (responsiveCols * (iconSize + 24)) + ((responsiveCols - 1) * colGap);
+    const exactGridHeight = (responsiveRows * (iconSize + LABEL_BLOCK_HEIGHT)) + ((responsiveRows - 1) * rowGap) + GRID_PADDING_Y;
+    // 缩放后仍占着原始高度，负外边距把空白收掉，页面才不会多出滚动
+    const scaleOverflow = Math.round((1 - scale) * exactGridHeight);
 
     return (
         <DndContext
@@ -1001,7 +1062,8 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
                                         transform: `scale(${scale})`,
                                         transformOrigin: 'top center',
                                         width: `${exactGridWidth}px`,
-                                        maxWidth: '100%'
+                                        maxWidth: '100%',
+                                        marginBottom: scaleOverflow > 0 ? `${-scaleOverflow}px` : undefined
                                     }}
                                 >
                                     {pageShortcuts.map((shortcut) => (
@@ -1031,7 +1093,7 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
 
             <DragOverlay>
                 {activeId && activeNodeShortcut ? (
-                    <div style={{ transform: 'scale(1.05)' }}>
+                    <div style={{ transform: `scale(${(1.05 * scale).toFixed(3)})`, transformOrigin: 'top left' }}>
                         <div className="flex flex-col items-center gap-3">
                             <ShortcutIcon
                                 shortcut={activeNodeShortcut}
