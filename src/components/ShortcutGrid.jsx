@@ -512,6 +512,8 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
     const [editingShortcut, setEditingShortcut] = useState(null);
     const [layout, setLayout] = useState({ cols, rows, colGap: 48, rowGap: 40, scale: 1 });
     const [activeId, setActiveId] = useState(null);
+    const [swipeOffset, setSwipeOffset] = useState(0);
+    const [isSwiping, setIsSwiping] = useState(false);
     const [openFolder, setOpenFolder] = useState(null);
     const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
     const [dropCandidateId, setDropCandidateId] = useState(null);
@@ -524,6 +526,12 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
     const accumulatedRef = useRef(0);
     const lastTimeRef = useRef(0);
     const isChangingRef = useRef(false);
+    const swipeRef = useRef(null);
+    const activeIdRef = useRef(null);
+
+    useEffect(() => {
+        activeIdRef.current = activeId;
+    }, [activeId]);
 
     const collisionDetectionStrategy = useCallback((args) => {
         const overlapCollisions = rectIntersection(args);
@@ -996,6 +1004,96 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
         return () => window.removeEventListener('wheel', handleWheel);
     }, [totalPages, renderPage, goToPage]);
 
+    // 👆 分页后支持手指/鼠标横向滑动翻页：拖拽跟手，松手超过阈值才翻页
+    useEffect(() => {
+        if (totalPages <= 1) return undefined;
+
+        const handlePointerDown = (e) => {
+            if (e.pointerType === 'mouse' && e.button !== 0) return;
+            if (activeIdRef.current) return;
+
+            const target = e.target;
+            if (target.closest('button')) return;
+            // 鼠标从左键按下图标就是拖拽排序，滑动只从空白处开始；触摸快速滑动不受影响
+            if (e.pointerType === 'mouse' && target.closest('[data-shortcut-id]')) return;
+
+            swipeRef.current = {
+                pointerId: e.pointerId,
+                startX: e.clientX,
+                startY: e.clientY,
+                horizontal: false,
+            };
+        };
+
+        const handlePointerMove = (e) => {
+            const swipe = swipeRef.current;
+            if (!swipe || swipe.pointerId !== e.pointerId) return;
+
+            if (activeIdRef.current) {
+                swipeRef.current = null;
+                setIsSwiping(false);
+                setSwipeOffset(0);
+                return;
+            }
+
+            const dx = e.clientX - swipe.startX;
+            const dy = e.clientY - swipe.startY;
+
+            if (!swipe.horizontal) {
+                if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+                if (Math.abs(dx) <= Math.abs(dy)) {
+                    swipeRef.current = null; // 纵向手势交给页面滚动/长按
+                    return;
+                }
+                swipe.horizontal = true;
+                setIsSwiping(true);
+            }
+
+            const atStart = renderPage === 0 && dx > 0;
+            const atEnd = renderPage === totalPages - 1 && dx < 0;
+            setSwipeOffset(atStart || atEnd ? dx * 0.25 : dx);
+        };
+
+        const finishSwipe = (e) => {
+            const swipe = swipeRef.current;
+            if (!swipe || swipe.pointerId !== e.pointerId) return;
+            swipeRef.current = null;
+
+            if (swipe.horizontal) {
+                const width = containerRef.current?.getBoundingClientRect().width || window.innerWidth;
+                const threshold = Math.min(120, width * 0.18);
+                const dx = e.clientX - swipe.startX;
+
+                if (Math.abs(dx) > threshold) {
+                    goToPage(renderPage + (dx < 0 ? 1 : -1));
+                }
+                setSwipeOffset(0);
+                setIsSwiping(false);
+            }
+        };
+
+        const cancelSwipe = () => {
+            swipeRef.current = null;
+            setSwipeOffset(0);
+            setIsSwiping(false);
+        };
+
+        const container = containerRef.current;
+        container?.addEventListener('pointerdown', handlePointerDown);
+        window.addEventListener('pointermove', handlePointerMove);
+        window.addEventListener('pointerup', finishSwipe);
+        window.addEventListener('pointercancel', cancelSwipe);
+        window.addEventListener('blur', cancelSwipe);
+
+        return () => {
+            container?.removeEventListener('pointerdown', handlePointerDown);
+            window.removeEventListener('pointermove', handlePointerMove);
+            window.removeEventListener('pointerup', finishSwipe);
+            window.removeEventListener('pointercancel', cancelSwipe);
+            window.removeEventListener('blur', cancelSwipe);
+        };
+    }, [totalPages, renderPage, goToPage]);
+
     useEffect(() => {
         const handleKeyDown = (e) => {
             if (e.key === 'ArrowLeft') {
@@ -1037,11 +1135,12 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
             <div
                 ref={containerRef}
                 className="w-full overflow-x-hidden"
+                style={{ touchAction: 'pan-y' }}
             >
                 <div
-                    className="flex transition-transform duration-300 ease-out"
+                    className={`flex ${isSwiping ? '' : 'transition-transform duration-300 ease-out'}`}
                     style={{
-                        transform: `translateX(${-renderPage * 100}%)`,
+                        transform: `translateX(calc(${-renderPage * 100}% + ${swipeOffset}px))`,
                     }}
                 >
                     {pages.map((pageShortcuts, pageIndex) => (

@@ -584,10 +584,26 @@ function renderWebDashboardHtml() {
           </div>
 
           <div class="w-full">
-            <!-- ⚡ 桌面图标容器 (移动端支持4列并收窄间距，PC 端不超过 5 列) -->
-            <div id="shortcuts-container" class="grid grid-cols-4 sm:grid-cols-4 md:grid-cols-5 gap-x-1.5 gap-y-3 sm:gap-4 md:gap-6 max-w-4xl mx-auto py-2">
-              <!-- 动态加载桌面图标和文件夹 -->
+            <!-- ⚡ 桌面图标容器 (移动端支持4列并收窄间距，PC 端不超过 5 列；高度不足时自动收行距/缩放/减行分页) -->
+            <div id="shortcuts-viewport" class="w-full overflow-x-hidden" style="touch-action: pan-y;">
+              <div id="shortcuts-track" class="flex transition-transform duration-300 ease-out">
+                <!-- 每页一个网格，左右滑动切换 -->
+              </div>
             </div>
+
+            <!-- 📄 分页条：多页时出现，支持圆点/箭头点击与左右滑动翻页 -->
+            <div id="shortcuts-pager" class="hidden items-center justify-center gap-2 mt-3 select-none">
+              <button id="pager-prev" onclick="goToShortcutPage(shortcutPage - 1)" aria-label="上一页"
+                      class="w-8 h-8 rounded-full bg-black/30 hover:bg-black/45 border border-glass-border text-slate-200 flex items-center justify-center transition active:scale-95 disabled:opacity-35 disabled:cursor-default">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+              </button>
+              <div id="pager-dots" class="flex items-center gap-1.5 px-1"></div>
+              <button id="pager-next" onclick="goToShortcutPage(shortcutPage + 1)" aria-label="下一页"
+                      class="w-8 h-8 rounded-full bg-black/30 hover:bg-black/45 border border-glass-border text-slate-200 flex items-center justify-center transition active:scale-95 disabled:opacity-35 disabled:cursor-default">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+              </button>
+            </div>
+
             <div id="shortcuts-empty" class="hidden py-16 text-center text-slate-400 text-xs sm:text-sm">
               暂无桌面图标，请先在 Chrome 扩展中添加并同步
             </div>
@@ -964,6 +980,10 @@ function renderWebDashboardHtml() {
     let isCreatingNote = false;
     let currentTab = 'shortcuts';
 
+    // 📄 桌面分页状态：分页后支持圆点/箭头点击、滚轮与左右滑动翻页
+    let shortcutPage = 0;
+    let shortcutPageCount = 1;
+
     // ⚙️ 默认布局与背景配置 (与 Chrome 插件版本数据格式 100% 对齐)
     let gridConfig = (() => {
       try {
@@ -1001,11 +1021,17 @@ function renderWebDashboardHtml() {
           btn.className = 'flex items-center gap-1.5 px-3.5 sm:px-5 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all duration-200 text-slate-400 hover:text-white';
         }
       });
+
+      // 桌面视图显示后再按实际位置重算一次布局（隐藏时量不到顶部位置）
+      if (tab === 'shortcuts' && currentSyncData && Array.isArray(currentSyncData.shortcuts)) {
+        renderShortcuts(currentSyncData.shortcuts);
+      }
     }
 
     async function init() {
       applyBgConfig();
       applyGridConfig();
+      setupShortcutPaging();
 
       // 动态时间暗度监听（每分钟与切回前台时平滑自适应，与插件逻辑一致）
       setInterval(() => {
@@ -1499,27 +1525,80 @@ function renderWebDashboardHtml() {
       return generateLetterAvatar(s.title || s.name || 'Web');
     }
 
-    // 渲染桌面图标
-    function renderShortcuts(shortcuts) {
-      applyGridConfig();
-      const container = document.getElementById('shortcuts-container');
-      const emptyEl = document.getElementById('shortcuts-empty');
-      document.getElementById('shortcuts-count').innerText = shortcuts.length;
+    // 🖥️ 可用高度自适应：行距 → 整体缩放 → 每页行数逐级压缩，矮窗口也能完整看到整页图标
+    const SHORTCUT_LABEL_BLOCK = 30; // 标题行高 + 图标下间距 + 图标项内边距
+    const SHORTCUT_GRID_PADDING_Y = 16; // 网格容器 py-2
+    const SHORTCUT_MIN_ROW_GAP = 12;
+    const SHORTCUT_MIN_SCALE = 0.78;
+    const SHORTCUT_PAGER_RESERVE = 120; // 分页条 + 页脚 + 主区内边距
+    const SHORTCUT_BOTTOM_RESERVE = 76; // 页脚 + 主区内边距
 
-      if (shortcuts.length === 0) {
-        container.innerHTML = '';
-        emptyEl.classList.remove('hidden');
-        return;
-      }
-      emptyEl.classList.add('hidden');
-
+    function computeShortcutLayout(totalCount) {
+      const width = window.innerWidth;
+      const isMobile = width < 640;
       const baseIconSize = Math.min(80, Math.max(44, Number(gridConfig.iconSize) || 56));
-      const isMobile = window.innerWidth < 640;
-      const iconSize = isMobile
-        ? Math.min(baseIconSize, window.innerWidth < 380 ? 46 : 50)
-        : baseIconSize;
+      const iconSize = isMobile ? Math.min(baseIconSize, width < 380 ? 46 : 50) : baseIconSize;
 
-      container.innerHTML = shortcuts.map((s, idx) => {
+      // 列数沿用原规则：PC 最多 5 列，平板/手机最多 4 列
+      let cols = Math.min(5, Math.max(2, Number(gridConfig.cols) || 5));
+      if (width < 768) cols = Math.min(cols, 4);
+
+      const colGap = width >= 768 ? 24 : (width >= 640 ? 16 : 6);
+      const preferredRowGap = width >= 768 ? 24 : (width >= 640 ? 16 : 12);
+      const maxRows = Math.min(4, Math.max(1, Number(gridConfig.rows) || 4));
+      const itemHeight = iconSize + SHORTCUT_LABEL_BLOCK;
+
+      const viewport = document.getElementById('shortcuts-viewport');
+      const top = viewport ? viewport.getBoundingClientRect().top : 180;
+
+      const fitVertically = (reserve) => {
+        const available = Math.max(80, window.innerHeight - top - reserve);
+        const natural = maxRows * itemHeight + (maxRows - 1) * preferredRowGap + SHORTCUT_GRID_PADDING_Y;
+        if (natural <= available) {
+          return { rows: maxRows, rowGap: preferredRowGap, scale: 1 };
+        }
+
+        const rowGap = Math.max(
+          SHORTCUT_MIN_ROW_GAP,
+          Math.floor((available - maxRows * itemHeight - SHORTCUT_GRID_PADDING_Y) / Math.max(1, maxRows - 1))
+        );
+        const compactHeight = maxRows * itemHeight + (maxRows - 1) * rowGap + SHORTCUT_GRID_PADDING_Y;
+        let scale = Math.min(1, available / compactHeight);
+        if (scale >= SHORTCUT_MIN_SCALE) {
+          return { rows: maxRows, rowGap: rowGap, scale: scale };
+        }
+
+        // 缩到下限仍放不下时才减少每页行数，按“缩到下限刚好放得下”估算
+        const rowsThatFit = Math.floor(
+          ((available / SHORTCUT_MIN_SCALE) - SHORTCUT_GRID_PADDING_Y + SHORTCUT_MIN_ROW_GAP) / (itemHeight + SHORTCUT_MIN_ROW_GAP)
+        );
+        const rows = Math.max(1, Math.min(maxRows, rowsThatFit));
+        const fitHeight = rows * itemHeight + (rows - 1) * SHORTCUT_MIN_ROW_GAP + SHORTCUT_GRID_PADDING_Y;
+        scale = Math.min(1, available / fitHeight);
+        return { rows: rows, rowGap: SHORTCUT_MIN_ROW_GAP, scale: scale };
+      };
+
+      const fitsOnOnePage = totalCount <= cols * maxRows;
+      let vertical = fitVertically(fitsOnOnePage ? SHORTCUT_BOTTOM_RESERVE : SHORTCUT_PAGER_RESERVE);
+      if (fitsOnOnePage && vertical.rows < maxRows) {
+        // 压缩行数后会多出分页条，重算一次给它让位
+        vertical = fitVertically(SHORTCUT_PAGER_RESERVE);
+      }
+
+      return {
+        cols: cols,
+        rows: vertical.rows,
+        colGap: colGap,
+        rowGap: vertical.rowGap,
+        scale: vertical.scale,
+        iconSize: iconSize,
+      };
+    }
+
+    // 渲染单页图标内容
+    function renderShortcutGrid(pageShortcuts, layout, startIndex) {
+      const iconSize = layout.iconSize;
+      return pageShortcuts.map((s, idx) => {
         const isFolder = s.type === 'folder';
         const title = s.title || s.name || (isFolder ? '文件夹' : '快捷方式');
 
@@ -1529,7 +1608,7 @@ function renderWebDashboardHtml() {
           const gridCols = previewIcons.length <= 4 ? 'grid-cols-2' : 'grid-cols-3';
 
           return \`
-            <div onclick="openFolderModal('\${s.id || idx}')"
+            <div onclick="openFolderModal('\${s.id || (startIndex + idx)}')"
                  class="group flex flex-col items-center justify-center p-0.5 sm:p-1 cursor-pointer select-none">
               <div style="width: \${iconSize}px; height: \${iconSize}px;"
                    class="rounded-xl sm:rounded-2xl mb-1 sm:mb-1.5 p-1 sm:p-1.5 bg-white/15 hover:bg-white/25 backdrop-blur-md border border-white/20 shadow-md shadow-black/30 grid \${gridCols} gap-0.5 sm:gap-1 items-center justify-center overflow-hidden group-hover:scale-108 transition-all duration-200">
@@ -1565,29 +1644,207 @@ function renderWebDashboardHtml() {
       }).join('');
     }
 
-    // 🖥️ 动态应用网格与布局设置 (严格控制 PC 端列数不超过 5，移动端支持 4 列紧凑排布)
-    function applyGridConfig() {
-      const container = document.getElementById('shortcuts-container');
-      if (!container) return;
-      // 严格限制 PC 端最多 5 列
-      const cols = Math.min(5, Math.max(2, Number(gridConfig.cols) || 5));
+    // 渲染桌面图标（按可用高度分页）
+    function renderShortcuts(shortcuts) {
+      applyGridConfig();
+      const track = document.getElementById('shortcuts-track');
+      const emptyEl = document.getElementById('shortcuts-empty');
+      const countEl = document.getElementById('shortcuts-count');
+      if (!track) return;
+      if (countEl) countEl.innerText = shortcuts.length;
 
-      if (window.innerWidth >= 768) {
-        container.style.gridTemplateColumns = 'repeat(' + cols + ', minmax(0, 1fr))';
-        container.style.columnGap = '24px';
-        container.style.rowGap = '24px';
-      } else if (window.innerWidth >= 640) {
-        container.style.gridTemplateColumns = 'repeat(' + Math.min(cols, 4) + ', minmax(0, 1fr))';
-        container.style.columnGap = '16px';
-        container.style.rowGap = '16px';
-      } else {
-        // 📱 手机端适配：默认展示 4 列，间距收窄至 6px/12px
-        const mobileCols = Math.min(cols, 4);
-        container.style.gridTemplateColumns = 'repeat(' + mobileCols + ', minmax(0, 1fr))';
-        container.style.columnGap = '6px';
-        container.style.rowGap = '12px';
+      if (shortcuts.length === 0) {
+        track.innerHTML = '';
+        shortcutPage = 0;
+        shortcutPageCount = 1;
+        applyShortcutPageTransform(false);
+        renderShortcutsPager();
+        if (emptyEl) emptyEl.classList.remove('hidden');
+        return;
+      }
+      if (emptyEl) emptyEl.classList.add('hidden');
+
+      const layout = computeShortcutLayout(shortcuts.length);
+      const pageSize = Math.max(1, layout.cols * layout.rows);
+      shortcutPageCount = Math.max(1, Math.ceil(shortcuts.length / pageSize));
+      shortcutPage = Math.max(0, Math.min(shortcutPageCount - 1, shortcutPage));
+
+      const pageHeight = layout.rows * (layout.iconSize + SHORTCUT_LABEL_BLOCK)
+        + (layout.rows - 1) * layout.rowGap
+        + SHORTCUT_GRID_PADDING_Y;
+      // 缩放后仍占着原始高度，用负外边距收掉空白，页面不会多出滚动
+      const scaleOverflow = Math.round((1 - layout.scale) * pageHeight);
+
+      let html = '';
+      for (let pageIndex = 0; pageIndex < shortcutPageCount; pageIndex++) {
+        const start = pageIndex * pageSize;
+        const pageShortcuts = shortcuts.slice(start, start + pageSize);
+        const items = renderShortcutGrid(pageShortcuts, layout, start);
+
+        html += '<div class="shrink-0 w-full flex justify-center">'
+          + '<div class="grid max-w-4xl w-full px-1 py-2" style="'
+          + 'grid-template-columns: repeat(' + layout.cols + ', minmax(0, 1fr));'
+          + 'column-gap: ' + layout.colGap + 'px;'
+          + 'row-gap: ' + layout.rowGap + 'px;'
+          + 'transform: scale(' + layout.scale.toFixed(4) + ');'
+          + 'transform-origin: top center;'
+          + 'margin-bottom: ' + (scaleOverflow > 0 ? -scaleOverflow : 0) + 'px;'
+          + '">' + items + '</div></div>';
       }
 
+      track.innerHTML = html;
+      applyShortcutPageTransform(false);
+      renderShortcutsPager();
+    }
+
+    // 📄 分页圆点与箭头状态
+    function renderShortcutsPager() {
+      const pager = document.getElementById('shortcuts-pager');
+      const dots = document.getElementById('pager-dots');
+      if (!pager || !dots) return;
+
+      if (shortcutPageCount <= 1) {
+        pager.classList.add('hidden');
+        pager.classList.remove('flex');
+        dots.innerHTML = '';
+        return;
+      }
+
+      pager.classList.remove('hidden');
+      pager.classList.add('flex');
+
+      let html = '';
+      for (let i = 0; i < shortcutPageCount; i++) {
+        html += '<button onclick="goToShortcutPage(' + i + ')" aria-label="第 ' + (i + 1) + ' 页" class="h-2 rounded-full transition-all '
+          + (i === shortcutPage ? 'w-5 bg-white' : 'w-2 bg-white/40 hover:bg-white/70') + '"></button>';
+      }
+      dots.innerHTML = html;
+
+      const prev = document.getElementById('pager-prev');
+      const next = document.getElementById('pager-next');
+      if (prev) prev.disabled = shortcutPage <= 0;
+      if (next) next.disabled = shortcutPage >= shortcutPageCount - 1;
+    }
+
+    function applyShortcutPageTransform(animate) {
+      const track = document.getElementById('shortcuts-track');
+      if (!track) return;
+      track.classList.toggle('transition-transform', animate);
+      track.style.transform = 'translateX(' + (-shortcutPage * 100) + '%)';
+    }
+
+    function goToShortcutPage(page) {
+      const target = Math.max(0, Math.min(shortcutPageCount - 1, page));
+      if (target === shortcutPage) return;
+      shortcutPage = target;
+      applyShortcutPageTransform(true);
+      renderShortcutsPager();
+    }
+
+    // 👆 分页后支持左右滑动（触摸/鼠标拖拽）与滚轮翻页
+    function setupShortcutPaging() {
+      const viewport = document.getElementById('shortcuts-viewport');
+      const track = document.getElementById('shortcuts-track');
+      if (!viewport || !track) return;
+
+      let swipe = null;
+
+      viewport.addEventListener('pointerdown', function (e) {
+        if (shortcutPageCount <= 1) return;
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        if (e.target.closest('a') || e.target.closest('button')) return;
+        swipe = { id: e.pointerId, x: e.clientX, y: e.clientY, horizontal: false };
+      });
+
+      window.addEventListener('pointermove', function (e) {
+        if (!swipe || swipe.id !== e.pointerId) return;
+
+        const dx = e.clientX - swipe.x;
+        const dy = e.clientY - swipe.y;
+
+        if (!swipe.horizontal) {
+          if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+          if (Math.abs(dx) <= Math.abs(dy)) {
+            swipe = null; // 纵向手势交给页面滚动
+            return;
+          }
+          swipe.horizontal = true;
+          track.classList.remove('transition-transform');
+        }
+
+        const atStart = shortcutPage === 0 && dx > 0;
+        const atEnd = shortcutPage === shortcutPageCount - 1 && dx < 0;
+        const offset = atStart || atEnd ? dx * 0.25 : dx;
+        track.style.transform = 'translateX(calc(' + (-shortcutPage * 100) + '% + ' + offset + 'px))';
+      });
+
+      const finishSwipe = function (e) {
+        if (!swipe || swipe.id !== e.pointerId) return;
+        const current = swipe;
+        swipe = null;
+        if (!current.horizontal) return;
+
+        const width = viewport.getBoundingClientRect().width || window.innerWidth;
+        const threshold = Math.min(120, width * 0.18);
+        const dx = e.clientX - current.x;
+
+        track.classList.add('transition-transform');
+        if (Math.abs(dx) > threshold) {
+          goToShortcutPage(shortcutPage + (dx < 0 ? 1 : -1));
+        } else {
+          track.style.transform = 'translateX(' + (-shortcutPage * 100) + '%)';
+        }
+      };
+
+      const cancelSwipe = function () {
+        swipe = null;
+        track.classList.add('transition-transform');
+        track.style.transform = 'translateX(' + (-shortcutPage * 100) + '%)';
+      };
+
+      window.addEventListener('pointerup', finishSwipe);
+      window.addEventListener('pointercancel', cancelSwipe);
+
+      // 鼠标滚轮与触控板横向滑动
+      let wheelAccum = 0;
+      let wheelTime = 0;
+      window.addEventListener('wheel', function (e) {
+        if (shortcutPageCount <= 1 || currentTab !== 'shortcuts') return;
+        const settingsModal = document.getElementById('settings-modal');
+        if (settingsModal && !settingsModal.classList.contains('hidden')) return;
+
+        const now = Date.now();
+        if (now - wheelTime > 200) wheelAccum = 0;
+        wheelTime = now;
+
+        const isHorizontal = Math.abs(e.deltaX) > Math.abs(e.deltaY);
+        const isMouseWheel = e.deltaX === 0 && e.deltaY !== 0;
+        let delta = 0;
+        if (isHorizontal) delta = e.deltaX;
+        else if (isMouseWheel) delta = e.deltaY;
+        else return;
+
+        wheelAccum += delta;
+        if (wheelAccum > 50) {
+          goToShortcutPage(shortcutPage + 1);
+          wheelAccum = 0;
+        } else if (wheelAccum < -50) {
+          goToShortcutPage(shortcutPage - 1);
+          wheelAccum = 0;
+        }
+      }, { passive: true });
+
+      window.addEventListener('keydown', function (e) {
+        if (currentTab !== 'shortcuts' || shortcutPageCount <= 1) return;
+        const active = document.activeElement;
+        if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)) return;
+        if (e.key === 'ArrowLeft') goToShortcutPage(shortcutPage - 1);
+        else if (e.key === 'ArrowRight') goToShortcutPage(shortcutPage + 1);
+      });
+    }
+
+    // 🖥️ 动态应用搜索栏与搜索引擎设置 (网格样式由 renderShortcuts 按可用空间计算)
+    function applyGridConfig() {
       // 搜索栏显示与隐藏
       const searchBar = document.getElementById('desktop-search-bar');
       if (searchBar) {
@@ -1763,7 +2020,7 @@ function renderWebDashboardHtml() {
       const num = Math.min(5, Math.max(2, Number(val) || 5));
       document.getElementById('setting-cols-display').innerText = num + ' 列';
       gridConfig.cols = num;
-      applyGridConfig();
+      renderShortcuts(currentSyncData?.shortcuts || []);
     }
 
     function onSettingIconSizeChange(val) {
@@ -1776,6 +2033,8 @@ function renderWebDashboardHtml() {
     function onSettingShowSearchChange(checked) {
       gridConfig.showSearchBar = checked;
       applyGridConfig();
+      // 搜索栏显隐会改变网格顶部位置，需要按新位置重算高度布局
+      renderShortcuts(currentSyncData?.shortcuts || []);
     }
 
     function onSettingSearchEngineChange(val) {
