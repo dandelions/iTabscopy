@@ -445,6 +445,7 @@ const Settings = ({
                                             showToast('Logged out successfully', 'success');
                                         }}
                                         lastSync={syncService.getLastSync()}
+                                        showToast={showToast}
                                     />
                                 )}
                             </div>
@@ -665,6 +666,8 @@ const LoginForm = ({ onLogin, showToast, onSyncPull, onSyncPush }) => {
     const [showDataConflict, setShowDataConflict] = useState(false);
     const [pendingLoginEmail, setPendingLoginEmail] = useState(null);
     const [isResolvingDataChoice, setIsResolvingDataChoice] = useState(false);
+    const [migrationCode, setMigrationCode] = useState('');
+    const [showMigration, setShowMigration] = useState(false);
 
     const isDefaultShortcuts = (list) => {
         if (!Array.isArray(list) || list.length !== 1) return false;
@@ -934,6 +937,40 @@ const LoginForm = ({ onLogin, showToast, onSyncPull, onSyncPush }) => {
         }
     };
 
+    const handleRestoreFromMigration = async () => {
+        setIsLoading(true);
+        try {
+            const restored = syncService.applyMigrationCode(migrationCode);
+            setMigrationCode('');
+            setShowMigration(false);
+
+            // 拉取云端数据期间禁止自动推送，避免把新安装的默认数据覆盖到云端
+            localStorage.setItem(SYNC_AUTO_PUSH_BLOCKED_KEY, '1');
+            let pullError = null;
+            if (onSyncPull) {
+                try {
+                    const applied = await onSyncPull({ forceApply: true, throwOnError: true });
+                    if (!applied) pullError = new Error('云端暂无可拉取数据');
+                } catch (error) {
+                    pullError = error;
+                }
+            }
+            localStorage.removeItem(SYNC_AUTO_PUSH_BLOCKED_KEY);
+
+            onLogin(restored.email);
+            if (pullError) {
+                showToast(`登录已恢复，但拉取云端数据失败：${pullError.message}`, 'error');
+            } else {
+                showToast(`已恢复登录并拉取云端数据：${restored.email}`, 'success');
+            }
+        } catch (error) {
+            localStorage.removeItem(SYNC_AUTO_PUSH_BLOCKED_KEY);
+            showToast(error.message, 'error');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     // Show data conflict choice UI
     if (showDataConflict) {
         return (
@@ -1078,6 +1115,39 @@ const LoginForm = ({ onLogin, showToast, onSyncPull, onSyncPush }) => {
                 >
                     {isRegistering ? '已有账户？登录' : '没有账户？注册'}
                 </button>
+
+                <div className="pt-1 border-t border-white/10">
+                    <button
+                        type="button"
+                        onClick={() => setShowMigration(!showMigration)}
+                        className="w-full pt-2 text-xs text-white/50 hover:text-white/80 transition-colors"
+                    >
+                        {showMigration ? '收起迁移码' : '重装或换机？用迁移码免登录恢复'}
+                    </button>
+
+                    {showMigration && (
+                        <div className="mt-3 space-y-2 p-3 bg-white/5 rounded-lg border border-white/10">
+                            <textarea
+                                value={migrationCode}
+                                onChange={(e) => setMigrationCode(e.target.value)}
+                                placeholder="粘贴旧版本「同步设置」里生成的迁移码"
+                                rows={3}
+                                className="w-full bg-black/20 border border-white/10 rounded-lg p-2.5 text-[11px] text-white font-mono focus:outline-none focus:border-white/30 placeholder-white/30 resize-none"
+                            />
+                            <button
+                                type="button"
+                                onClick={handleRestoreFromMigration}
+                                disabled={isLoading || !migrationCode.trim()}
+                                className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-xs font-medium text-white rounded-lg transition-colors disabled:opacity-50"
+                            >
+                                {isLoading ? '恢复中...' : '恢复登录并拉取云端数据'}
+                            </button>
+                            <p className="text-[11px] text-white/40 leading-relaxed">
+                                迁移码包含登录令牌，等同于登录凭据，请勿分享。恢复后建议在旧插件里登出，让旧码失效。
+                            </p>
+                        </div>
+                    )}
+                </div>
             </form>
 
             <div className="mt-6 p-4 bg-white/5 rounded-lg border border-white/10">
@@ -1090,7 +1160,27 @@ const LoginForm = ({ onLogin, showToast, onSyncPull, onSyncPush }) => {
 };
 
 // Sync Panel Component
-const SyncPanel = ({ email, isSyncing, isPullingFromCloud, onSync, onPullFromCloud, onLogout, lastSync }) => {
+const SyncPanel = ({ email, isSyncing, isPullingFromCloud, onSync, onPullFromCloud, onLogout, lastSync, showToast }) => {
+    const [migrationCode, setMigrationCode] = useState('');
+    const [showMigration, setShowMigration] = useState(false);
+
+    const handleCreateMigrationCode = async () => {
+        try {
+            const code = syncService.createMigrationCode();
+            setMigrationCode(code);
+            setShowMigration(true);
+
+            try {
+                await navigator.clipboard.writeText(code);
+                showToast?.('迁移码已复制到剪贴板', 'success');
+            } catch {
+                showToast?.('迁移码已生成，请手动复制', 'success');
+            }
+        } catch (error) {
+            showToast?.(error.message, 'error');
+        }
+    };
+
     const formatLastSync = (timestamp) => {
         if (!timestamp) return '从未';
         const numeric = Number(timestamp);
@@ -1149,6 +1239,30 @@ const SyncPanel = ({ email, isSyncing, isPullingFromCloud, onSync, onPullFromClo
                     )}
                     <span>{isPullingFromCloud ? '同步中...' : '同步云端到本地'}</span>
                 </button>
+
+                {/* 迁移码：重装/换机后免登录恢复 */}
+                <div className="p-4 bg-white/5 rounded-lg border border-white/10 space-y-2">
+                    <button
+                        onClick={handleCreateMigrationCode}
+                        className="w-full py-2 bg-white/10 hover:bg-white/20 text-xs font-medium text-white rounded-lg transition-colors border border-white/10"
+                    >
+                        生成迁移码（重装 / 换机免登录）
+                    </button>
+                    {showMigration && (
+                        <>
+                            <textarea
+                                readOnly
+                                value={migrationCode}
+                                rows={3}
+                                onFocus={(e) => e.target.select()}
+                                className="w-full bg-black/20 border border-white/10 rounded-lg p-2.5 text-[11px] text-white font-mono focus:outline-none resize-none"
+                            />
+                            <p className="text-[11px] text-white/40 leading-relaxed">
+                                迁移码包含登录令牌，等同于登录凭据，请勿分享；在旧插件里登出即可让它失效。
+                            </p>
+                        </>
+                    )}
+                </div>
 
                 {/* Info */}
                 <div className="p-4 bg-white/5 rounded-lg border border-white/10">

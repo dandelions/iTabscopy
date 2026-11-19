@@ -323,6 +323,51 @@ class SyncService {
         localStorage.setItem('sync_token', token);
         localStorage.setItem('sync_email', email);
     }
+
+    // 生成迁移码：重装或换机后免登录恢复（内含登录令牌，等同于登录凭据）
+    createMigrationCode() {
+        if (!this.token || !this.email) {
+            throw new Error('请先登录后再生成迁移码');
+        }
+
+        const workerUrl = this.getWorkerUrl();
+        if (!workerUrl) {
+            throw new Error('未配置同步服务器地址');
+        }
+
+        const payload = JSON.stringify({ v: 1, w: workerUrl, e: this.email, t: this.token });
+        const bytes = new TextEncoder().encode(payload);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i += 1) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary);
+    }
+
+    // 用迁移码恢复登录状态，返回恢复出的账号信息
+    applyMigrationCode(code) {
+        const raw = String(code || '').replace(/\s+/g, '');
+        if (!raw) {
+            throw new Error('请输入迁移码');
+        }
+
+        let payload;
+        try {
+            const binary = atob(raw);
+            const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+            payload = JSON.parse(new TextDecoder().decode(bytes));
+        } catch {
+            throw new Error('迁移码格式不正确，请检查是否完整复制');
+        }
+
+        if (!payload || payload.v !== 1 || !payload.w || !payload.e || !payload.t) {
+            throw new Error('迁移码内容不完整');
+        }
+
+        this.setWorkerUrl(payload.w);
+        this.saveAuth(payload.t, payload.e);
+        return { email: payload.e, workerUrl: normalizeWorkerUrl(payload.w) };
+    }
 }
 
 // Export singleton instance
