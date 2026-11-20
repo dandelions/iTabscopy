@@ -390,6 +390,7 @@ const SortableShortcutItem = ({
                                   isEditing,
                                   setIsEditing,
                                   onIconEmbedded,
+                                  suppressShortcutClickUntilRef,
                                   showIconBadge = true
                               }) => {
     const {
@@ -432,6 +433,12 @@ const SortableShortcutItem = ({
             data-dragging={isDragging ? 'true' : undefined}
             className="sortable-item"
             onClick={(e) => {
+                if (Date.now() < suppressShortcutClickUntilRef.current) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    return;
+                }
+
                 if (isDragging) {
                     e.stopPropagation();
                     e.preventDefault();
@@ -527,6 +534,8 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
     const lastTimeRef = useRef(0);
     const isChangingRef = useRef(false);
     const swipeRef = useRef(null);
+    const touchSwipeRef = useRef(null);
+    const suppressShortcutClickUntilRef = useRef(0);
     const activeIdRef = useRef(null);
 
     useEffect(() => {
@@ -1004,92 +1013,124 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
         return () => window.removeEventListener('wheel', handleWheel);
     }, [totalPages, renderPage, goToPage]);
 
-    // 👆 分页后支持手指/鼠标横向滑动翻页：拖拽跟手，松手超过阈值才翻页
+    // 👆 分页后支持手指/鼠标横向滑动；触摸单独处理，避免与 dnd-kit 的 PointerSensor 冲突
     useEffect(() => {
         if (totalPages <= 1) return undefined;
 
-        const handlePointerDown = (e) => {
-            if (e.pointerType === 'mouse' && e.button !== 0) return;
-            if (activeIdRef.current) return;
+        const container = containerRef.current;
+        if (!container) return undefined;
 
-            const target = e.target;
-            if (target.closest('button')) return;
-            // 鼠标从左键按下图标就是拖拽排序，滑动只从空白处开始；触摸快速滑动不受影响
-            if (e.pointerType === 'mouse' && target.closest('[data-shortcut-id]')) return;
-
-            swipeRef.current = {
-                pointerId: e.pointerId,
-                startX: e.clientX,
-                startY: e.clientY,
-                horizontal: false,
-            };
+        const isIgnoredTarget = (target) => target instanceof Element && Boolean(target.closest('button'));
+        const applyOffset = (dx) => {
+            const atStart = renderPage === 0 && dx > 0;
+            const atEnd = renderPage === totalPages - 1 && dx < 0;
+            setSwipeOffset(atStart || atEnd ? dx * 0.25 : dx);
+        };
+        const finish = (dx, horizontal) => {
+            if (!horizontal) return;
+            const width = container.getBoundingClientRect().width || window.innerWidth;
+            const threshold = Math.min(120, width * 0.18);
+            if (Math.abs(dx) > threshold) {
+                suppressShortcutClickUntilRef.current = Date.now() + 350;
+                goToPage(renderPage + (dx < 0 ? 1 : -1));
+            }
+            setSwipeOffset(0);
+            setIsSwiping(false);
         };
 
+        // Mouse drag is only recognized from empty space so icon sorting remains unchanged.
+        const handlePointerDown = (e) => {
+            if (e.pointerType !== 'mouse' || e.button !== 0 || activeIdRef.current) return;
+            if (isIgnoredTarget(e.target) || (e.target instanceof Element && e.target.closest('[data-shortcut-id]'))) return;
+            swipeRef.current = { pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, horizontal: false };
+        };
         const handlePointerMove = (e) => {
             const swipe = swipeRef.current;
             if (!swipe || swipe.pointerId !== e.pointerId) return;
-
-            if (activeIdRef.current) {
-                swipeRef.current = null;
-                setIsSwiping(false);
-                setSwipeOffset(0);
-                return;
-            }
-
             const dx = e.clientX - swipe.startX;
             const dy = e.clientY - swipe.startY;
-
             if (!swipe.horizontal) {
                 if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
                 if (Math.abs(dx) <= Math.abs(dy)) {
-                    swipeRef.current = null; // 纵向手势交给页面滚动/长按
+                    swipeRef.current = null;
                     return;
                 }
                 swipe.horizontal = true;
                 setIsSwiping(true);
             }
-
-            const atStart = renderPage === 0 && dx > 0;
-            const atEnd = renderPage === totalPages - 1 && dx < 0;
-            setSwipeOffset(atStart || atEnd ? dx * 0.25 : dx);
+            applyOffset(dx);
         };
-
-        const finishSwipe = (e) => {
+        const finishPointerSwipe = (e) => {
             const swipe = swipeRef.current;
             if (!swipe || swipe.pointerId !== e.pointerId) return;
             swipeRef.current = null;
-
-            if (swipe.horizontal) {
-                const width = containerRef.current?.getBoundingClientRect().width || window.innerWidth;
-                const threshold = Math.min(120, width * 0.18);
-                const dx = e.clientX - swipe.startX;
-
-                if (Math.abs(dx) > threshold) {
-                    goToPage(renderPage + (dx < 0 ? 1 : -1));
-                }
-                setSwipeOffset(0);
-                setIsSwiping(false);
-            }
+            finish(e.clientX - swipe.startX, swipe.horizontal);
         };
 
+        // Native touch handlers keep swipe working over shortcut links and cancel their click.
+        const handleTouchStart = (e) => {
+            if (e.touches.length !== 1 || isIgnoredTarget(e.target)) return;
+            const touch = e.touches[0];
+            touchSwipeRef.current = { startX: touch.clientX, startY: touch.clientY, horizontal: false };
+        };
+        const handleTouchMove = (e) => {
+            const swipe = touchSwipeRef.current;
+            if (!swipe || e.touches.length !== 1) return;
+            if (activeIdRef.current) {
+                touchSwipeRef.current = null;
+                setSwipeOffset(0);
+                setIsSwiping(false);
+                return;
+            }
+            const touch = e.touches[0];
+            const dx = touch.clientX - swipe.startX;
+            const dy = touch.clientY - swipe.startY;
+            if (!swipe.horizontal) {
+                if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+                if (Math.abs(dx) <= Math.abs(dy)) {
+                    touchSwipeRef.current = null;
+                    return;
+                }
+                swipe.horizontal = true;
+                setIsSwiping(true);
+            }
+            if (e.cancelable) e.preventDefault();
+            applyOffset(dx);
+        };
+        const finishTouchSwipe = (e) => {
+            const swipe = touchSwipeRef.current;
+            if (!swipe) return;
+            touchSwipeRef.current = null;
+            const touch = e.changedTouches[0];
+            if (!touch) return;
+            finish(touch.clientX - swipe.startX, swipe.horizontal);
+        };
         const cancelSwipe = () => {
             swipeRef.current = null;
+            touchSwipeRef.current = null;
             setSwipeOffset(0);
             setIsSwiping(false);
         };
 
-        const container = containerRef.current;
-        container?.addEventListener('pointerdown', handlePointerDown);
+        container.addEventListener('pointerdown', handlePointerDown);
         window.addEventListener('pointermove', handlePointerMove);
-        window.addEventListener('pointerup', finishSwipe);
+        window.addEventListener('pointerup', finishPointerSwipe);
         window.addEventListener('pointercancel', cancelSwipe);
+        container.addEventListener('touchstart', handleTouchStart, { passive: true });
+        container.addEventListener('touchmove', handleTouchMove, { passive: false });
+        window.addEventListener('touchend', finishTouchSwipe, { passive: true });
+        window.addEventListener('touchcancel', cancelSwipe, { passive: true });
         window.addEventListener('blur', cancelSwipe);
 
         return () => {
-            container?.removeEventListener('pointerdown', handlePointerDown);
+            container.removeEventListener('pointerdown', handlePointerDown);
             window.removeEventListener('pointermove', handlePointerMove);
-            window.removeEventListener('pointerup', finishSwipe);
+            window.removeEventListener('pointerup', finishPointerSwipe);
             window.removeEventListener('pointercancel', cancelSwipe);
+            container.removeEventListener('touchstart', handleTouchStart);
+            container.removeEventListener('touchmove', handleTouchMove);
+            window.removeEventListener('touchend', finishTouchSwipe);
+            window.removeEventListener('touchcancel', cancelSwipe);
             window.removeEventListener('blur', cancelSwipe);
         };
     }, [totalPages, renderPage, goToPage]);
@@ -1180,6 +1221,7 @@ const ShortcutGrid = ({ config, shortcuts, onRemoveShortcut, onEditShortcut, onR
                                             isDropCandidate={dropCandidateId === shortcut.id}
                                             isMergeTarget={mergeTargetId === shortcut.id}
                                             onIconEmbedded={handleIconEmbedded}
+                                            suppressShortcutClickUntilRef={suppressShortcutClickUntilRef}
                                             showIconBadge={showIconBadge}
                                         />
                                     ))}

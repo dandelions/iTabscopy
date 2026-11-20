@@ -1748,13 +1748,43 @@ function renderWebDashboardHtml() {
       if (!viewport || !track) return;
 
       let swipe = null;
+      let touchSwipe = null;
+      let suppressLinkClickUntil = 0;
 
       viewport.addEventListener('pointerdown', function (e) {
-        if (shortcutPageCount <= 1) return;
-        if (e.pointerType === 'mouse' && e.button !== 0) return;
-        if (e.target.closest('a') || e.target.closest('button')) return;
+        if (shortcutPageCount <= 1 || e.pointerType !== 'mouse' || e.button !== 0) return;
+        if (e.target.closest('a, button')) return;
         swipe = { id: e.pointerId, x: e.clientX, y: e.clientY, horizontal: false };
       });
+
+      viewport.addEventListener('touchstart', function (e) {
+        if (shortcutPageCount <= 1 || e.touches.length !== 1 || e.target.closest('button')) return;
+        const touch = e.touches[0];
+        touchSwipe = { x: touch.clientX, y: touch.clientY, horizontal: false };
+      }, { passive: true });
+
+      viewport.addEventListener('touchmove', function (e) {
+        if (!touchSwipe || e.touches.length !== 1) return;
+        const touch = e.touches[0];
+        const dx = touch.clientX - touchSwipe.x;
+        const dy = touch.clientY - touchSwipe.y;
+
+        if (!touchSwipe.horizontal) {
+          if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+          if (Math.abs(dx) <= Math.abs(dy)) {
+            touchSwipe = null;
+            return;
+          }
+          touchSwipe.horizontal = true;
+          track.classList.remove('transition-transform');
+        }
+
+        if (e.cancelable) e.preventDefault();
+        const atStart = shortcutPage === 0 && dx > 0;
+        const atEnd = shortcutPage === shortcutPageCount - 1 && dx < 0;
+        const offset = atStart || atEnd ? dx * 0.25 : dx;
+        track.style.transform = 'translateX(calc(' + (-shortcutPage * 100) + '% + ' + offset + 'px))';
+      }, { passive: false });
 
       window.addEventListener('pointermove', function (e) {
         if (!swipe || swipe.id !== e.pointerId) return;
@@ -1796,14 +1826,46 @@ function renderWebDashboardHtml() {
         }
       };
 
+      const finishTouchSwipe = function (e) {
+        if (!touchSwipe) return;
+        const current = touchSwipe;
+        touchSwipe = null;
+        if (!current.horizontal) return;
+
+        const touch = e.changedTouches[0];
+        if (!touch) return;
+        const width = viewport.getBoundingClientRect().width || window.innerWidth;
+        const threshold = Math.min(120, width * 0.18);
+        const dx = touch.clientX - current.x;
+
+        track.classList.add('transition-transform');
+        if (Math.abs(dx) > threshold) {
+          suppressLinkClickUntil = Date.now() + 350;
+          goToShortcutPage(shortcutPage + (dx < 0 ? 1 : -1));
+        } else {
+          track.style.transform = 'translateX(' + (-shortcutPage * 100) + '%)';
+        }
+      };
+
+      const handleClickAfterSwipe = function (e) {
+        if (Date.now() >= suppressLinkClickUntil) return;
+        e.preventDefault();
+        e.stopPropagation();
+        suppressLinkClickUntil = 0;
+      };
+
       const cancelSwipe = function () {
         swipe = null;
+        touchSwipe = null;
         track.classList.add('transition-transform');
         track.style.transform = 'translateX(' + (-shortcutPage * 100) + '%)';
       };
 
+      viewport.addEventListener('click', handleClickAfterSwipe, true);
       window.addEventListener('pointerup', finishSwipe);
       window.addEventListener('pointercancel', cancelSwipe);
+      window.addEventListener('touchend', finishTouchSwipe, { passive: true });
+      window.addEventListener('touchcancel', cancelSwipe, { passive: true });
 
       // 鼠标滚轮与触控板横向滑动
       let wheelAccum = 0;
